@@ -10,12 +10,12 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 |------|-------------|--------|
 | F1 | Parser `.litematic` (NBT + bit-packing YZX) | ✅ hecho |
 | F2 | Resolución de blockstates/modelos desde el client jar | ✅ hecho |
-| F3 | Texturas y atlas | ⏳ pendiente |
-| F4 | Malla y culling por `cullface` | ⏳ pendiente |
+| F3 | Texturas y atlas | ✅ hecho |
+| F4 | Malla y culling por `cullface` | ✅ hecho |
 | F5 | Export OBJ + MTL + atlas | ⏳ pendiente |
 | F6 | API (FastAPI) + CLI | 🚧 CLI `info`/`list` listo |
 | F7 | Visor web Three.js | ⏳ pendiente |
-| F8 | Tests | 🚧 91 tests |
+| F8 | Tests | 🚧 128 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -79,11 +79,15 @@ src/lite2obj/
   models.py      blockstates y modelos (variants/multipart, rotaciones)
   fallbacks.py   geometría sustituta (fluidos, bloques de entidad)
   aliases.py     bloques renombrados entre versiones
+  textures.py    atlas de texturas, sprites teñidos
+  mesh.py        malla del esquemático (caras, UV, culling)
   cli.py         interfaz de línea de comandos
 tests/
   test_nbt.py                 lector NBT contra un escritor de tests
   test_litematic.py           bit-packing, tamaños negativos, multi-región, fixture real
   test_models.py              rotaciones, variants/multipart, parent, texturas
+  test_textures.py            empaquetado del atlas, tintes, transparencia
+  test_mesh.py                orientación de caras/UV, culling, malla real
   test_schematics_integration.py  valida todos los .litematic de la máquina
   test_coverage_integration.py    cobertura de geometría sobre los esquemáticos
 ```
