@@ -194,5 +194,51 @@ def test_atlas_packing_of_many_sprites_stays_power_of_two():
     assert atlas.sprite_count == 100
 
 
+def make_overlay_png() -> bytes:
+    """Mitad opaca (arriba) y mitad transparente (abajo), como el overlay de la hierba."""
+    image = Image.new("RGBA", (16, 16), (0, 255, 0, 0))
+    for y in range(8):
+        for x in range(16):
+            image.putpixel((x, y), (0, 255, 0, 255))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_combine_draws_the_second_sprite_over_the_first():
+    atlas = make_atlas(
+        {
+            texture_path("test:block/base"): make_png(16, 16, (255, 0, 0, 255)),
+            texture_path("test:block/top"): make_overlay_png(),
+        }
+    )
+    base = atlas.add("test:block/base")
+    top = atlas.add("test:block/top")
+    combined = atlas.combine(base, top)
+    assert combined is not None and combined is not base
+    atlas.build()
+
+    image = atlas.image
+    left, upper, _, _ = combined.box
+    # Donde el overlay es opaco queda su color; donde es transparente, el de la base.
+    assert image.getpixel((left + 4, upper + 2))[:3] == (0, 255, 0)
+    assert image.getpixel((left + 4, upper + 12))[:3] == (255, 0, 0)
+    # La mezcla es opaca (la base lo era en todas partes).
+    assert atlas.alpha_mode(combined) == 0
+    assert atlas.is_opaque(combined)
+
+
+def test_combine_is_cached_and_handles_missing_sprites():
+    atlas = make_atlas({texture_path("test:block/base"): make_png(16, 16)})
+    base = atlas.add("test:block/base")
+    assert atlas.combine(base, base) is base
+    assert atlas.combine(base, None) is base
+    assert atlas.combine(None, base) is base
+    assert atlas.combine(None, None) is None
+    top = atlas.add("test:block/otra")
+    assert top is None  # textura inexistente: no hay sprite que componer
+    assert atlas.combine(base, top) is base
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__]))

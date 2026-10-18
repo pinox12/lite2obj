@@ -15,7 +15,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | API (FastAPI) + CLI | ✅ hecho |
 | F7 | Visor web Three.js | ✅ hecho |
-| F8 | Tests | 🚧 179 tests |
+| F8 | Tests | ✅ 202 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -73,6 +73,20 @@ almacen bonito 1x4x4
 Al importar en Blender (`File > Import > Wavefront (.obj)`) deja los tres archivos en la misma
 carpeta y mantén `Split by Object` desactivado para obtener una sola malla. Si desactivas la
 conversión de ejes del importador usa `--z-up`.
+
+Notas de fidelidad:
+
+- **Variantes de terreno**: `stone`, `dirt` o `grass_block` traen varias rotaciones y Minecraft
+  elige una por posición; el export las reparte igual (con un *hash* estable), así que el suelo
+  no sale repetitivo.
+- **Caras superpuestas**: si dos caras del mismo bloque comparten plano (la hierba y su
+  *overlay* lateral) se hornean en una sola textura. Blender descarta caras repetidas, así que
+  de otro modo perdería el *overlay*.
+- **Caras repetidas entre bloques**: losas, escaleras, cristales y alfombras comparten caras
+  con sus vecinos porque éstos no son cubos opacos; Minecraft también las dibuja dos veces.
+  Blender puede descartarlas al importar (misma textura, sin diferencia visible).
+- **`uvlock`**: las esquinas de escalera (`inner_*`/`outer_*`) usan las UV del modelo en vez de
+  bloquear el giro; es la única concesión conocida del conversor.
 
 ### Visor web
 

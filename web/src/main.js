@@ -70,12 +70,13 @@ controls.dampingFactor = 0.12;
 controls.screenSpacePanning = false;
 controls.maxPolarAngle = Math.PI * 0.495;
 
-// Iluminación "de bloque": ambiente alto y una direccional para que las caras se distingan.
-scene.add(new THREE.AmbientLight(0xffffff, 0.62));
-const keyLight = new THREE.DirectionalLight(0xffffff, 0.75);
-keyLight.position.set(0.55, 1, 0.35);
+// Iluminación "de bloque": casi todo ambiente y dos direccionales suaves que sólo sirven
+// para que dos caras vecinas no se vean iguales (como el sombreado fijo de Minecraft).
+scene.add(new THREE.AmbientLight(0xffffff, 0.78));
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.42);
+keyLight.position.set(0.45, 1, 0.3);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xffffff, 0.28);
+const fillLight = new THREE.DirectionalLight(0xffffff, 0.22);
 fillLight.position.set(-0.6, 0.35, -0.55);
 scene.add(fillLight);
 

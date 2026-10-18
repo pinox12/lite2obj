@@ -11,8 +11,8 @@ Sin Java.
 
 ## Estado (v1 funcional de punta a punta)
 
-F1–F7 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
-texturas/atlas → malla con culling → OBJ+MTL+atlas y visor web. 179 tests, `ruff` y `mypy`
+F1–F8 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
+texturas/atlas → malla con culling → OBJ+MTL+atlas y visor web. 202 tests, `ruff` y `mypy`
 limpios.
 
 | Fase | Estado | Nota |
@@ -24,7 +24,7 @@ limpios.
 | F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
 | F6 API + CLI | ✅ | `info`, `list`, `export`, `view`; API FastAPI con visor estático |
 | F7 Visor | ✅ | funciona sin npm (importmap CDN) y con Vite; validado con capturas headless |
-| F8 Tests | 🚧 | 179 tests; pendiente: golden de conteos, `uvlock`, corte por capas, wireframe |
+| F8 Tests | ✅ | 202 tests; golden de conteos, `uvlock` documentado; pendiente sólo capas/wireframe (extras) |
 
 Módulos reales (los nombres del plan cambiaron al implementar):
 
@@ -54,6 +54,16 @@ Desviaciones respecto al plan:
   para desarrollo (proxy de `/api`).
 - **`uvlock`**: los modelos con `uvlock` (esquinas de escaleras `inner_*`/`outer_*`) usan las
   UVs del modelo en lugar de bloquear el giro; es la única concesión conocida.
+- **Variants por posición**: los bloques de terreno (`stone`, `dirt`, `grass_block`…) traen
+  varias rotaciones y Minecraft elige una **por posición**; se replica con un *hash* estable de
+  la posición (`models.position_seed`), así que el suelo no se ve repetitivo. El *hash* no es
+  el de Minecraft bit a bit (sólo hace falta que reparta).
+- **Normales**: se calculan del giro de los vértices cuando hay rotación (variant o elemento):
+  hay 95 modelos vanilla que rotan elementos (`block/cross`, fans de coral, soportes…) y otros
+  que además usan `rescale`; girar sólo las posiciones dejaba esas caras mal sombreadas.
+- **Caras coincidentes**: si dos caras del *mismo* bloque comparten plano (la hierba y su
+  *overlay* lateral), se hornean en una sola textura y una sola cara; así el visor y Blender
+  enseñan lo mismo. Entre bloques distintos no se tocan (Minecraft también dibuja las dos).
 - **Entidades y `Items` de cofres**: fuera de v1, como estaba previsto.
 - **Tintes**: se aplican multiplicando la textura (sprites teñidos dentro del atlas), en vez
   de colores por vértice, para que el color viaje en el OBJ sin nada extra.
@@ -62,12 +72,14 @@ Culling medido (caras sin descartar → con descarte):
 
 | Esquemático | Caras | Reducción | Tiempo |
 |---|---|---|---|
-| Diabu_coastal_house | 58 495 → 48 630 | 17 % | 0,37 s |
-| Diaburita_Mediterranean_villa | 106 206 → 82 889 | 22 % | 0,52 s |
-| medieval_tavern | 151 786 → 106 677 | 30 % | 0,57 s |
+| Diabu_coastal_house | 57 671 → 40 352 | 30 % | 0,54 s |
+| Diaburita_Mediterranean_villa | 101 684 → 67 931 | 33 % | 0,85 s |
+| medieval_tavern | 151 786 → 103 383 | 32 % | 0,95 s |
 
 (No llega al >50 % que estimaba el plan porque son edificios huecos: la mayoría de caras ya
-eran exteriores. El descarte sí elimina todas las caras entre bloques opacos contiguos.)
+eran exteriores. El descarte sí elimina todas las caras entre bloques opacos contiguos; las
+~5 800 que quedan solapadas son casos que Minecraft también dibuja dos veces: losas, escaleras,
+cristales y alfombras, donde el vecino no es un cubo opaco.)
 
 ---
 
@@ -231,7 +243,7 @@ Notas:
 
 ### F8 · Tests
 - Unitarios: NBT, bit-array (fixture de 42 bloques), matching de variants, cadena de parents,
-  logica de culling.
+  logica de culling, normales contra el giro de los vértices.
 - Golden: conteos de vertices/caras del fixture.
 - Integracion: lotes sobre los 27 schematics buscando errores de resolucion.
 

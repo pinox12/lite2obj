@@ -22,9 +22,10 @@ from lite2obj.mesh import (
     UV_CORNERS,
     MeshBuilder,
     MeshOptions,
+    _is_full_cube,
     rotate_uv,
 )
-from lite2obj.models import ModelResolver
+from lite2obj.models import Element, ModelResolver, Variant, pick_variants, position_seed
 
 EXPECTED_FACE_NORMALS = {
     "up": (0, 1, 0),
@@ -360,6 +361,252 @@ def test_real_fixture_mesh():
     # Todas las UV dentro del atlas.
     assert mesh.uvs.min() >= 0.0
     assert mesh.uvs.max() <= 1.0
+    # Las normales tienen que apuntar hacia fuera también en modelos reales.
+    assert_normals_match_winding(mesh, "fixture")
+
+
+# --------------------------------------------------------------------------- #
+# Oclusión, variants rotados y elección por posición
+# --------------------------------------------------------------------------- #
+
+
+def make_cutout_png() -> bytes:
+    """Textura con alfa 0/1 (como las hojas): se clasifica como *cutout*."""
+    image = Image.new("RGBA", (16, 16), (255, 0, 0, 0))
+    for x in range(8):
+        for y in range(16):
+            image.putpixel((x, y), (255, 0, 0, 255))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def rotated_cube_setup(**options) -> MeshBuilder:
+    """Bloque de terreno: cuatro variants que sólo se diferencian en la rotación."""
+    return make_setup(
+        {
+            blockstate_path("test:rock"): {
+                "variants": {
+                    "": [
+                        {"model": "test:block/cube"},
+                        {"model": "test:block/cube", "y": 90},
+                        {"model": "test:block/cube", "y": 180},
+                        {"model": "test:block/cube", "y": 270},
+                    ]
+                }
+            },
+            model_path("test:block/cube"): _model(),
+            texture_path("minecraft:block/tex"): make_png(),
+        },
+        **options,
+    )
+
+
+def test_full_cube_accepts_quarter_turns():
+    element = Element(frm=(0.0, 0.0, 0.0), to=(16.0, 16.0, 16.0), faces={})
+    assert _is_full_cube(element, Variant(model="m"))
+    assert _is_full_cube(element, Variant(model="m", y=180))
+    assert _is_full_cube(element, Variant(model="m", x=90, y=270))
+    assert not _is_full_cube(element, Variant(model="m", y=45))
+    half = Element(frm=(0.0, 0.0, 0.0), to=(16.0, 8.0, 16.0), faces={})
+    assert not _is_full_cube(half, Variant(model="m", y=180))
+
+
+def test_rotated_variants_still_cull_neighbours():
+    """Los bloques con rotaciones aleatorias siguen ocultando las caras de al lado."""
+    builder = rotated_cube_setup()
+    region = _region([AIR, BlockState("test:rock")], [1, 1], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+    assert mesh.quad_count == 10
+
+
+def test_covers_is_true_for_the_terrain_variants():
+    builder = rotated_cube_setup()
+    for _ in range(4):
+        assert builder.state_mesh(BlockState("test:rock"), (1, 2, 3)).covers
+
+
+def assert_normals_match_winding(mesh, label: str = "") -> None:
+    """La normal declarada tiene que apuntar igual que el giro de los vértices.
+
+    Es la comprobación que caza rotaciones aplicadas a las posiciones y no a las normales.
+    """
+    quads = mesh.positions.reshape(-1, 4, 3)
+    for index, quad in enumerate(quads):
+        expected = np.cross(quad[1] - quad[0], quad[2] - quad[0])
+        length = float(np.linalg.norm(expected))
+        if length < 1e-9:
+            continue  # cara degenerada: no la puede haber, pero no rompemos el test
+        expected = expected / length
+        assert np.allclose(expected, mesh.normals[index * 4], atol=1e-4), (
+            f"{label}: cara {index} apunta a {mesh.normals[index * 4]}, el giro dice {expected}"
+        )
+
+
+def test_normals_follow_the_variant_rotation():
+    """Un cubo girado por el variant debe tener las normales giradas con él."""
+    builder = rotated_cube_setup(cull=False)
+    region = _region([AIR, BlockState("test:rock")], [1, 1, 1, 1], (4, 1, 1))
+    mesh = builder.build(_doc([region], (4, 1, 1)))
+    assert mesh.quad_count == 24  # cuatro cubos sin descarte
+    # Las cuatro rotaciones están en juego (si no, el test no comprobaría nada).
+    normals = {tuple(float(v) for v in row) for row in mesh.normals[::4]}
+    assert len(normals) >= 4
+    assert_normals_match_winding(mesh, "variants rotados")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "minecraft:grass_block",
+        "minecraft:dandelion",
+        "minecraft:tube_coral_fan",
+        "minecraft:big_dripleaf",
+        "minecraft:brewing_stand",
+        "minecraft:chain",
+        "minecraft:ladder",
+        "minecraft:oak_stairs",
+        "minecraft:oak_fence",
+        "minecraft:hopper",
+        "minecraft:anvil",
+    ],
+)
+def test_real_models_have_outward_normals(name):
+    """Modelos reales con rotaciones de elemento (cruces, fans, cadenas...) incluidos."""
+    from _jar import jar_resources
+
+    builder = MeshBuilder(ModelResolver(jar_resources()))
+    region = _region([AIR, BlockState(name)], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+    assert mesh.quad_count > 0
+    assert_normals_match_winding(mesh, name)
+
+
+def test_variants_are_picked_per_position():
+    """Como Minecraft: cada posición escoge una de las variantes del bloque."""
+    entries: dict[str, object] = {}
+    variants = []
+    for index, direction in enumerate(("north", "east", "south", "west")):
+        model = f"test:block/rock_{direction}"
+        texture = f"minecraft:block/rock_{direction}"
+        entries[model_path(model)] = _model(texture)
+        entries[texture_path(texture)] = make_png(color=(40 * index + 20, 0, 0, 255))
+        variants.append({"model": model})
+    entries[blockstate_path("test:rock")] = {"variants": {"": variants}}
+
+    grid = [1] * 16  # 4x4 bloques de roca
+    region = _region([AIR, BlockState("test:rock")], grid, (4, 1, 4))
+    doc = _doc([region], (4, 1, 4))
+    mesh = make_setup(entries).build(doc)
+
+    # Hay más de un variant en juego (si siempre se eligiese el mismo, habría un solo sprite).
+    assert len(set(mesh.sprite.tolist())) >= 3
+    # Y la elección es estable: reconstruir da exactamente la misma malla.
+    again = make_setup(entries).build(doc)
+    assert np.array_equal(mesh.positions, again.positions)
+
+
+def test_position_seed_changes_between_neighbours():
+    seeds = {position_seed((x, 0, 0)) for x in range(16)}
+    assert len(seeds) == 16
+    assert len({position_seed((x, y, 3)) % 4 for x in range(8) for y in range(8)}) > 1
+
+
+def test_pick_variants_decorrelates_groups():
+    groups = (
+        (Variant("a1"), Variant("a2")),
+        (Variant("b1"), Variant("b2")),
+    )
+    picks = [pick_variants(groups, seed) for seed in range(8)]
+    assert len({pick[0].model for pick in picks}) == 2
+    assert len({pick[1].model for pick in picks}) == 2
+    assert {pick[0].model for pick in picks} != {pick[1].model for pick in picks}
+
+
+def test_overlay_element_does_not_prevent_occlusion():
+    """La hierba (cubo opaco + capa exterior translúcida) sí tapa lo de dentro."""
+    overlay = {
+        d: {"texture": "#overlay", "cullface": d} for d in ("north", "south", "east", "west")
+    }
+    builder = make_setup(
+        {
+            blockstate_path("test:grass"): {"variants": {"": {"model": "test:block/grass"}}},
+            model_path("test:block/grass"): {
+                "textures": {"all": "minecraft:block/tex", "overlay": "minecraft:block/overlay"},
+                "elements": [
+                    {
+                        "from": [0, 0, 0],
+                        "to": [16, 16, 16],
+                        "faces": {
+                            d: {"texture": "#all", "cullface": d} for d in EXPECTED_FACE_NORMALS
+                        },
+                    },
+                    {"from": [0, 0, 0], "to": [16, 16, 16], "faces": overlay},
+                ],
+            },
+            blockstate_path("test:cube"): {"variants": {"": {"model": "test:block/cube"}}},
+            model_path("test:block/cube"): _model(),
+            texture_path("minecraft:block/tex"): make_png(),
+            texture_path("minecraft:block/overlay"): make_cutout_png(),
+        }
+    )
+    assert builder.state_mesh(BlockState("test:grass")).covers
+
+    # La hierba se queda con una cara por lado: la base y el overlay comparten plano y se
+    # hornean juntos (si no, Blender descartaría el overlay).
+    grass = builder.state_mesh(BlockState("test:grass"))
+    assert grass.quad_count == 6
+
+    # Cubo + hierba pegados: el cubo pierde su cara contra la hierba, y la hierba pierde la
+    # suya contra el cubo: 5 + 5 = 10 caras de 12 posibles.
+    region = _region([AIR, BlockState("test:cube"), BlockState("test:grass")], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+    assert mesh.quad_count == 10
+
+
+def test_block_with_transparent_overlay_does_not_occlude():
+    """Si el cubo completo es translúcido (cristal), no oculta al vecino."""
+    builder = make_setup(
+        {
+            blockstate_path("test:glass"): {"variants": {"": {"model": "test:block/glass"}}},
+            model_path("test:block/glass"): _model("minecraft:block/glass"),
+            blockstate_path("test:cube"): {"variants": {"": {"model": "test:block/cube"}}},
+            model_path("test:block/cube"): _model(),
+            texture_path("minecraft:block/tex"): make_png(),
+            texture_path("minecraft:block/glass"): make_cutout_png(),
+        }
+    )
+    assert not builder.state_mesh(BlockState("test:glass")).covers
+    region = _region([AIR, BlockState("test:cube"), BlockState("test:glass")], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+    # El cubo conserva su cara este (el cristal no la tapa): 6 + 5 = 11.
+    assert mesh.quad_count == 11
+
+
+def test_multipart_variants_pick_one_instead_of_everything():
+    """Un ``apply`` con varios variants es una elección, no una superposición."""
+    builder = make_setup(
+        {
+            blockstate_path("test:thing"): {
+                "multipart": [
+                    {
+                        "when": {"powered": "true"},
+                        "apply": [
+                            {"model": "test:block/a", "weight": 2},
+                            {"model": "test:block/b"},
+                        ],
+                    }
+                ]
+            },
+            model_path("test:block/a"): _model("minecraft:block/tex_a"),
+            model_path("test:block/b"): _model("minecraft:block/tex_b"),
+            texture_path("minecraft:block/tex_a"): make_png(),
+            texture_path("minecraft:block/tex_b"): make_png(color=(0, 0, 255, 255)),
+        }
+    )
+    region = _region([AIR, BlockState("test:thing", (("powered", "true"),))], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+    assert mesh.quad_count == 6
 
 
 if __name__ == "__main__":  # pragma: no cover

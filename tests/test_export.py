@@ -185,6 +185,30 @@ def test_export_result_as_dict(tmp_path):
 # --------------------------------------------------------------------------- #
 
 
+def test_real_fixture_golden_counts(tmp_path):
+    """Conteos fijos del fixture con vanilla 26.3: cazan regresiones de malla y export.
+
+    Si cambia la versión del jar esta prueba hay que actualizarla a mano (es su objetivo).
+    """
+    from _jar import jar_resources
+
+    from lite2obj import litematic as litematic_module
+
+    doc = litematic_module.load("tests/fixtures/store_1x4x4.litematic")
+    mesh = MeshBuilder(ModelResolver(jar_resources())).build(doc)
+    assert (mesh.quad_count, mesh.vertex_count) == (253, 1012)
+    assert len(mesh.palette) == 19
+    assert mesh.atlas.sprite_count == 8
+    assert mesh.atlas.size == (128, 64)
+
+    positions, uvs, normals, faces, _, _ = obj_geometry(mesh, ExportOptions())
+    assert (len(positions), len(uvs), len(normals), len(faces)) == (238, 32, 6, 253)
+
+    result = export_obj(mesh, tmp_path, ExportOptions(name="store"))
+    assert result.vertices == 238
+    assert result.faces == 253
+
+
 def test_real_fixture_export_roundtrip(tmp_path):
     from _jar import jar_resources
 

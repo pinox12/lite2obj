@@ -180,25 +180,60 @@ class TextureAtlas:
                 image = self._prepare(image)
                 if tint is not None:
                     image = _apply_tint(image, tint)
-                sprite = Sprite(
-                    key=key,
-                    x=0,
-                    y=0,
-                    width=image.width,
-                    height=image.height,
-                    texture=texture,
-                    index=len(self._images),
-                )
-                self._images.append((sprite, image))
-                alpha_min, alpha_max = image.getchannel("A").getextrema()
-                self._opaque[sprite.index] = alpha_min == 255
-                if alpha_min == 255:
-                    self._alpha_mode[sprite.index] = 0  # opaco
-                elif alpha_min == 0 and _is_binary_alpha(image):
-                    self._alpha_mode[sprite.index] = 1  # cutout (alfa 0 o 255)
-                else:
-                    self._alpha_mode[sprite.index] = 2  # translúcido
+                sprite = self._register(key, texture, image)
         self._sprites[key] = sprite
+        return sprite
+
+    def combine(self, base: Sprite | None, overlay: Sprite | None) -> Sprite | None:
+        """Hornea dos sprites coincidentes en uno solo, con ``overlay`` encima.
+
+        Minecraft dibuja la segunda cara encima cuando comparten plano (la hierba y su
+        *overlay* lateral, por ejemplo), así que el resultado visible es la mezcla. Al
+        fusionarlas queda una única cara, que además sobrevive al importar en Blender
+        (que descarta las caras repetidas).
+        """
+        if base is None:
+            return overlay
+        if overlay is None or overlay is base:
+            return base
+        key = ("#combinado", f"{base.index}|{overlay.index}")
+        cached = self._sprites.get(key)
+        if cached is not None:
+            return cached
+        base_image = self._image_of(base)
+        top_image = self._image_of(overlay)
+        if base_image is None or top_image is None:
+            return base
+        composed = Image.alpha_composite(base_image, top_image)
+        sprite = self._register(key, base.texture, composed)
+        self._sprites[key] = sprite
+        return sprite
+
+    def _image_of(self, sprite: Sprite) -> Image.Image | None:
+        for candidate, image in self._images:
+            if candidate.index == sprite.index:
+                return image
+        return None
+
+    def _register(self, key: tuple[str | None, str | None], texture: str | None, image) -> Sprite:
+        sprite = Sprite(
+            key=key,
+            x=0,
+            y=0,
+            width=image.width,
+            height=image.height,
+            texture=texture,
+            index=len(self._images),
+        )
+        self._images.append((sprite, image))
+        alpha_min, _ = image.getchannel("A").getextrema()
+        self._opaque[sprite.index] = alpha_min == 255
+        if alpha_min == 255:
+            self._alpha_mode[sprite.index] = 0  # opaco
+        elif alpha_min == 0 and _is_binary_alpha(image):
+            self._alpha_mode[sprite.index] = 1  # cutout (alfa 0 o 255)
+        else:
+            self._alpha_mode[sprite.index] = 2  # translúcido
         return sprite
 
     def alpha_mode(self, sprite: Sprite | None) -> int:

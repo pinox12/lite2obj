@@ -32,6 +32,8 @@ from .models import (
     Element,
     ModelResolver,
     Variant,
+    pick_variants,
+    position_seed,
     variant_matrix,
 )
 from .textures import DEFAULT_TINTS, Sprite, TextureAtlas, TintResolver
@@ -102,6 +104,21 @@ NEIGHBOURS: dict[str, tuple[int, int, int]] = {
 }
 
 _MODEL_UNITS = 16.0
+
+
+def _winding_normal(quad: np.ndarray) -> np.ndarray:
+    """Normal unitaria según el giro de los vértices (hacia fuera).
+
+    Se usa en vez de girar el vector de la tabla cuando hay rotaciones: hay modelos con
+    elementos planos (las cruces de las flores, con grosor 0) donde la matriz de ``rescale``
+    es singular y su inversa traspuesta no existe. El producto vectorial siempre es válido
+    para una cara que se vaya a ver.
+    """
+    vector = np.cross(quad[1] - quad[0], quad[2] - quad[0])
+    length = float(np.linalg.norm(vector))
+    if length < 1e-9:
+        return np.zeros(3, dtype=np.float32)
+    return (vector / length).astype(np.float32)
 
 
 def rotate_uv(s: float, t: float, rotation: int) -> tuple[float, float]:
@@ -292,28 +309,43 @@ class MeshBuilder:
             enabled=self.options.tint,
             tints=self.options.tint_colors or dict(DEFAULT_TINTS),
         )
-        self._states: dict[str, StateMesh] = {}
+        self._states: dict[tuple[str, tuple[tuple[str, int, int, bool], ...]], StateMesh] = {}
 
     # -- plantillas -------------------------------------------------------- #
 
     def state_key(self, block: BlockState) -> str:
         return f"{block.name}[{block.variant_key()}]"
 
-    def state_mesh(self, block: BlockState) -> StateMesh:
-        """Geometría local del estado, con caché por estado."""
-        key = self.state_key(block)
+    def state_mesh(
+        self, block: BlockState, position: tuple[int, int, int] | None = None
+    ) -> StateMesh:
+        """Geometría local del estado, con caché por estado y variant elegido.
+
+        Los bloques de terreno traen varias rotaciones y Minecraft escoge una por posición,
+        así que la plantilla se cachea por ``(estado, variants escogidos)``.
+        """
+        resolved = self.resolver.resolve(block)
+        seed = position_seed(position) if position is not None else resolved.seed
+        variants = pick_variants(resolved.groups, seed)
+        signature = tuple((v.model, v.x, v.y, v.uvlock) for v in variants)
+        key = (self.state_key(block), signature)
         cached = self._states.get(key)
         if cached is not None:
             return cached
 
-        geometry = self.resolver.geometry(block)
+        geometry = self.resolver.elements_for(resolved, variants)
         templates: list[QuadTemplate] = []
-        opaque = True
+        # Con un solo elemento no puede haber caras coincidentes: se salta el agrupado.
+        merge = len(geometry) > 1
+        merged: dict[tuple[object, ...], int] = {}
+        covers = False
         for element, variant in geometry:
             model = self.resolver.model(variant.model)
             matrix = variant_matrix(variant.x, variant.y)
             corners = element.corners()
             local = ((matrix @ (corners - BLOCK_CENTER).T).T + BLOCK_CENTER) / _MODEL_UNITS
+            rotated = element.rotation is not None or bool(variant.x or variant.y)
+            element_opaque = True
             for direction, face in element.faces.items():
                 sprite = self.atlas.add(
                     model.texture(face.texture),
@@ -321,14 +353,30 @@ class MeshBuilder:
                 )
                 alpha_mode = self.atlas.alpha_mode(sprite)
                 if alpha_mode != 0:
-                    opaque = False
+                    element_opaque = False
                 st = np.zeros((4, 2), dtype=np.float32)
                 for slot, corner in enumerate(FACE_UV_ORDER[direction]):
                     st[slot] = rotate_uv(*UV_CORNERS[corner], face.rotation)
+                positions = local[list(FACE_CORNERS[direction])].astype(np.float32)
+                if rotated:
+                    normal = _winding_normal(positions)
+                else:
+                    normal = np.array(FACE_NORMALS[direction], dtype=np.float32)
+                if merge:
+                    # Dos caras en el mismo plano (la hierba y su overlay) se hornean en una:
+                    # así el visor y Blender enseñan lo mismo que Minecraft.
+                    plane = (direction, *np.round(positions, 4).ravel().tolist())
+                    previous = merged.get(plane)
+                    if previous is not None:
+                        quad = templates[previous]
+                        quad.sprite = self.atlas.combine(quad.sprite, sprite)
+                        quad.alpha_mode = max(quad.alpha_mode, self.atlas.alpha_mode(quad.sprite))
+                        continue
+                    merged[plane] = len(templates)
                 templates.append(
                     QuadTemplate(
-                        positions=local[list(FACE_CORNERS[direction])].astype(np.float32),
-                        normal=np.array(FACE_NORMALS[direction], dtype=np.float32),
+                        positions=positions,
+                        normal=normal,
                         st=st,
                         sprite=sprite,
                         cullface=face.cullface,
@@ -336,11 +384,15 @@ class MeshBuilder:
                         tintindex=face.tintindex,
                     )
                 )
+            # Ocluye si *algún* elemento es el cubo unidad y sus texturas son opacas: así los
+            # bloques con una capa encima (la hierba y su overlay) siguen tapando lo de dentro.
+            if element_opaque and _is_full_cube(element, variant):
+                covers = True
 
         state = StateMesh(
             block=block,
             templates=tuple(templates),
-            covers=opaque and _is_full_cube(geometry),
+            covers=covers,
         )
         self._states[key] = state
         return state
@@ -368,23 +420,24 @@ class MeshBuilder:
                             voxels[(ox + x, oy + y, oz + z)] = palette[index]
 
         placed: dict[tuple[int, int, int], StateMesh] = {}
-        states: dict[str, StateMesh] = {}
+        block_index: dict[str, int] = {}
         block_palette: list[BlockState] = []
         for position, block in voxels.items():
             key = self.state_key(block)
-            state = states.get(key)
-            if state is None:
-                state = self.state_mesh(block)
-                states[key] = state
+            if key not in block_index:
+                block_index[key] = len(block_palette)
                 block_palette.append(block)
-            placed[position] = state
+            placed[position] = self.state_mesh(block, position)
 
         self.atlas.build()
-        for state in states.values():
-            state.finalize(self.atlas)
+        finalized: set[int] = set()
+        for state in placed.values():
+            marker = id(state)
+            if marker not in finalized:
+                finalized.add(marker)
+                state.finalize(self.atlas)
 
         covers = {position: state.covers for position, state in placed.items()}
-        block_index = {key: index for index, key in enumerate(states)}
 
         buffer = _Buffer(len(placed))
         meta: list[tuple[int, int, int, int]] = []
@@ -445,11 +498,14 @@ class MeshBuilder:
         )
 
 
-def _is_full_cube(geometry: list[tuple[Element, Variant]]) -> bool:
-    """Cierto si la geometría es un único cubo 0..16 sin rotaciones."""
-    if len(geometry) != 1:
+def _is_full_cube(element: Element, variant: Variant) -> bool:
+    """Cierto si el elemento es el cubo 0..16 con una rotación de 90º (que lo deja igual).
+
+    Un cubo girado sigue siendo el cubo: si sólo mirásemos ``x == 0 and y == 0`` los bloques
+    de terreno (que traen cuatro rotaciones) no ocultarían nada y no habría descarte de caras.
+    """
+    if element.rotation is not None:
         return False
-    element, variant = geometry[0]
-    if variant.x or variant.y or element.rotation is not None:
+    if variant.x % 90 or variant.y % 90:
         return False
     return element.frm == (0.0, 0.0, 0.0) and element.to == (16.0, 16.0, 16.0)

@@ -190,10 +190,17 @@ class BlockStateDefinition:
     variants: dict[str, tuple[Variant, ...]] | None = None
     multipart: tuple[MultipartPart, ...] | None = None
 
-    def select(self, props: Mapping[str, str], seed: int = 0) -> tuple[Variant, ...]:
-        """Devuelve los variants que aplican a estas propiedades."""
+    def select_groups(self, props: Mapping[str, str]) -> tuple[tuple[Variant, ...], ...]:
+        """Grupos de variants candidatos para estas propiedades.
+
+        Cada grupo es una lista de variants entre los que hay que elegir **uno**: Minecraft lo
+        sortea por posición, y ahí está el truco de los bloques de terreno (``stone``,
+        ``dirt``...) que traen cuatro rotaciones para que el suelo no se vea repetitivo.
+        Un blockstate de ``variants`` produce un grupo; un ``multipart`` produce uno por cada
+        parte que encaje.
+        """
         try:
-            return self._select(props, seed)
+            return self._select_groups(props)
         except BlockModelError:
             # Esquemáticos antiguos pueden traer propiedades que ya no existen:
             # se reintenta sólo con las propiedades que usa esta definición.
@@ -201,9 +208,9 @@ class BlockStateDefinition:
             filtered = {k: v for k, v in props.items() if k in used}
             if filtered == dict(props):
                 raise
-            return self._select(filtered, seed)
+            return self._select_groups(filtered)
 
-    def _select(self, props: Mapping[str, str], seed: int) -> tuple[Variant, ...]:
+    def _select_groups(self, props: Mapping[str, str]) -> tuple[tuple[Variant, ...], ...]:
         if self.variants is not None:
             best: tuple[Variant, ...] | None = None
             best_score = -1
@@ -220,13 +227,13 @@ class BlockStateDefinition:
                         best, best_score = variants, score
             if best is None:
                 raise BlockModelError(f"{self.block}: ninguna variante coincide con {dict(props)}")
-            return (_weighted_pick(best, seed),)
+            return (best,)
 
         parts = self.multipart or ()
-        applicable = [v for part in parts if part.when.matches(props) for v in part.variants]
-        if not applicable:
+        groups = tuple(part.variants for part in parts if part.when.matches(props))
+        if not groups:
             raise BlockModelError(f"{self.block}: ningún multipart coincide con {dict(props)}")
-        return tuple(_weighted_pick((v,), seed) for v in applicable)
+        return groups
 
     def used_properties(self) -> set[str]:
         """Nombres de propiedades que referencia esta definición."""
@@ -281,6 +288,39 @@ def _weighted_pick(variants: Sequence[Variant], seed: int) -> Variant:
             return variant
         target -= weight
     return variants[-1]
+
+
+#: Constante de mezcla para dar un seed distinto a cada grupo de multipart.
+_GOLDEN = 0x9E3779B1
+
+
+def pick_variants(groups: Sequence[Sequence[Variant]], seed: int) -> tuple[Variant, ...]:
+    """Elige un variant por grupo usando ``seed`` (uno por posición, como Minecraft).
+
+    Los grupos se decorrelacionan avanzando el seed, de modo que dos partes de un
+    ``multipart`` no eligen siempre a la vez.
+    """
+    if len(groups) == 1:
+        return (_weighted_pick(groups[0], seed),)
+    return tuple(
+        _weighted_pick(group, seed + index * _GOLDEN) for index, group in enumerate(groups)
+    )
+
+
+def position_seed(position: tuple[int, int, int]) -> int:
+    """Seed estable a partir de la posición del bloque.
+
+    Minecraft usa su propio generador sembrado con la posición; no se replica bit a bit
+    porque sólo hace falta que dos bloques vecinos escojan variantes distintas.
+    """
+    x, y, z = position
+    value = (x * 0x9E3779B1) ^ (y * 0x85EBCA77) ^ (z * 0xC2B2AE3D)
+    value &= 0xFFFFFFFF
+    value ^= value >> 16
+    value = (value * 0x7FEB352D) & 0xFFFFFFFF
+    value ^= value >> 15
+    value = (value * 0x846CA68B) & 0xFFFFFFFF
+    return value ^ (value >> 16)
 
 
 def parse_blockstate(block: str, data: Mapping[str, Any]) -> BlockStateDefinition:
@@ -490,15 +530,21 @@ class ResolvedModel:
 
 @dataclass(frozen=True, slots=True)
 class ResolvedState:
-    """Resultado de resolver un estado de bloque: sus partes (modelo + rotación)."""
+    """Resultado de resolver un estado de bloque: sus grupos de variants candidatos."""
 
     block: BlockState
-    variants: tuple[Variant, ...]
+    groups: tuple[tuple[Variant, ...], ...]
     model_name: str = ""
+    seed: int = 0
+
+    @property
+    def variants(self) -> tuple[Variant, ...]:
+        """Variants elegidos con el seed estable del estado (sin posición)."""
+        return pick_variants(self.groups, self.seed)
 
     @property
     def is_empty(self) -> bool:
-        return not self.variants
+        return not self.groups
 
     @property
     def used_alias(self) -> bool:
@@ -532,13 +578,12 @@ class ModelResolver:
         self._blockstates[key] = definition
         return definition
 
-    def resolve(
-        self, block: BlockState, position: tuple[int, int, int] | None = None
-    ) -> ResolvedState:
-        """Resuelve un estado de bloque a sus variants, aplicando alias si hace falta.
+    def resolve(self, block: BlockState) -> ResolvedState:
+        """Resuelve un estado de bloque a sus grupos de variants (cacheado por estado).
 
-        La elección entre variants con ``weight`` es determinista por estado (se cachea),
-        de modo que el mismo estado de bloque se dibuja siempre igual.
+        La elección concreta entre los variants de un grupo no se hace aquí: depende de la
+        posición (ver :func:`pick_variants`), así que se guarda el seed estable del estado
+        para quien no tenga posición.
         """
         target = normalize_block_name(block.name)
         props = rename_properties(block.name, block.properties_dict())
@@ -548,12 +593,11 @@ class ModelResolver:
             return cached
 
         definition = self.blockstate(target)
-        seed = zlib.crc32(key.encode("utf-8")) & 0x7FFFFFFF
-
         resolved = ResolvedState(
             block=block,
-            variants=definition.select(props, seed),
+            groups=definition.select_groups(props),
             model_name=target,
+            seed=zlib.crc32(key.encode("utf-8")) & 0x7FFFFFFF,
         )
         self._states[key] = resolved
         return resolved
@@ -651,11 +695,12 @@ class ModelResolver:
     ) -> list[tuple[Element, Variant]]:
         """Elementos a dibujar con su variant (para aplicar rotaciones después).
 
-        Si el bloque no tiene geometría propia (fluidos, bloques de entidad) y
-        ``allow_fallback`` es ``True``, se genera geometría sustituta.
+        Con ``position`` la elección entre variants candidatos se hace con el seed de esa
+        posición, igual que Minecraft. Si el bloque no tiene geometría propia (fluidos,
+        bloques de entidad) y ``allow_fallback`` es ``True``, se genera geometría sustituta.
         """
         try:
-            state = self.resolve(block, position)
+            state = self.resolve(block)
         except BlockModelError:
             # Bloques sin blockstate (los fluidos son el caso típico).
             fallback = (
@@ -667,15 +712,27 @@ class ModelResolver:
                 raise
             return [(element, Variant(model=block.name)) for element in fallback]
 
+        seed = position_seed(position) if position is not None else state.seed
+        variants = pick_variants(state.groups, seed)
+        return self.elements_for(state, variants, allow_fallback=allow_fallback)
+
+    def elements_for(
+        self,
+        state: ResolvedState,
+        variants: Sequence[Variant],
+        *,
+        allow_fallback: bool = True,
+    ) -> list[tuple[Element, Variant]]:
+        """Elementos de un estado ya resuelto, con los variants concretos ya elegidos."""
         result: list[tuple[Element, Variant]] = []
-        for variant in state.variants:
+        for variant in variants:
             model = self.model(variant.model)
             result.extend((element, variant) for element in model.elements)
         if result or not allow_fallback:
             return result
 
         particle = None
-        for variant in state.variants:
+        for variant in variants:
             particle = self.model(variant.model).particle_texture()
             if particle:
                 break
@@ -684,7 +741,7 @@ class ModelResolver:
         )
         if not fallback:
             return []
-        synthetic = Variant(model=state.variants[0].model if state.variants else state.model_name)
+        synthetic = Variant(model=variants[0].model if variants else state.model_name)
         return [(element, synthetic) for element in fallback]
 
     def supports(self, block: BlockState, position: tuple[int, int, int] | None = None) -> bool:
