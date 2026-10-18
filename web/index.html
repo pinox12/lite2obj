@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lite2obj · visor de esquemáticos</title>
+    <link rel="stylesheet" href="./style.css" />
+    <!--
+      El importmap permite que este mismo index.html funcione de dos maneras:
+
+      * Servido por Python (sin npm): el navegador resuelve "three" desde el CDN.
+      * Servido por Vite: Vite reescribe los imports a node_modules y el importmap no se usa.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.186.1/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.186.1/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <header>
+          <h1>lite2obj</h1>
+          <p class="muted" id="health">conectando…</p>
+        </header>
+
+        <section>
+          <h2>Esquemático</h2>
+          <select id="schematics" size="6" aria-label="Esquemáticos encontrados"></select>
+          <div class="row">
+            <button id="reload" type="button" title="Vuelve a buscar en el disco">Actualizar</button>
+            <button id="open" type="button" title="Renderiza el seleccionado">Renderizar</button>
+          </div>
+          <label class="dropzone" id="dropzone">
+            <input id="upload" type="file" accept=".litematic" hidden />
+            <span>Arrastra un <code>.litematic</code> aquí o haz clic para subirlo</span>
+          </label>
+        </section>
+
+        <section>
+          <h2>Opciones</h2>
+          <label class="check">
+            <input id="cull" type="checkbox" checked />
+            <span>Descartar caras ocultas</span>
+          </label>
+          <label class="check">
+            <input id="tint" type="checkbox" checked />
+            <span>Tintes de bioma (césped, hojas, agua)</span>
+          </label>
+          <label class="field">
+            <span>Resource packs</span>
+            <select id="packs" multiple size="4" aria-label="Resource packs"></select>
+          </label>
+          <p class="muted small">
+            El último pack seleccionado tiene prioridad. Los assets que falten caen al jar vanilla.
+          </p>
+        </section>
+
+        <section id="stats-section" hidden>
+          <h2>Estadísticas</h2>
+          <dl id="stats"></dl>
+          <h3>Bloques más usados</h3>
+          <ul id="top-blocks" class="bars"></ul>
+        </section>
+
+        <section id="export-section" hidden>
+          <h2>Blender</h2>
+          <div class="row">
+            <button id="export-obj" type="button">Descargar OBJ</button>
+          </div>
+          <p class="muted small">
+            Descarga <code>.obj</code> y <code>.mtl</code>. El atlas se descarga aparte con
+            «Descargar atlas»; guarda los tres en la misma carpeta.
+          </p>
+          <div class="row">
+            <button id="export-atlas" type="button">Descargar atlas</button>
+          </div>
+        </section>
+
+        <footer>
+          <p class="muted small">
+            Ratón: orbitar · rueda: zoom · botón derecho: desplazar · <kbd>R</kbd>: reencuadrar
+          </p>
+        </footer>
+      </aside>
+
+      <main id="viewport">
+        <div id="overlay"></div>
+        <div id="hud"></div>
+      </main>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

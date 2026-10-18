@@ -179,19 +179,30 @@ class PackInfo:
 
 
 def list_packs() -> list[PackInfo]:
-    """Resource packs detectados, ordenados por nombre."""
+    """Resource packs detectados, ordenados por nombre.
+
+    Si varios perfiles de Minecraft tienen una copia del mismo pack se conserva la primera
+    (en el orden de :func:`paths.resourcepack_dirs`), para que ``--packs NOMBRE`` sea
+    determinista.
+    """
     packs: list[PackInfo] = []
-    seen: set[Path] = set()
+    seen_paths: set[Path] = set()
+    seen_names: set[str] = set()
     for directory in paths.resourcepack_dirs():
         for entry in sorted(directory.iterdir()):
-            if entry in seen:
+            if entry in seen_paths:
                 continue
             if entry.is_file() and entry.suffix.lower() == ".zip":
-                packs.append(PackInfo(name=entry.stem, path=entry, kind="zip"))
-                seen.add(entry)
+                info = PackInfo(name=entry.stem, path=entry, kind="zip")
             elif entry.is_dir() and (entry / "assets").is_dir():
-                packs.append(PackInfo(name=entry.name, path=entry, kind="dir"))
-                seen.add(entry)
+                info = PackInfo(name=entry.name, path=entry, kind="dir")
+            else:
+                continue
+            if info.name.lower() in seen_names:
+                continue
+            seen_paths.add(entry)
+            seen_names.add(info.name.lower())
+            packs.append(info)
     return sorted(packs, key=lambda p: p.name.lower())
 
 

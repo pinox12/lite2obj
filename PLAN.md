@@ -9,6 +9,68 @@ Sin Java.
 
 ---
 
+## Estado (v1 funcional de punta a punta)
+
+F1–F7 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
+texturas/atlas → malla con culling → OBJ+MTL+atlas y visor web. 179 tests, `ruff` y `mypy`
+limpios.
+
+| Fase | Estado | Nota |
+|---|---|---|
+| F1 Parser | ✅ | 27/27 esquemáticos; recuento exacto de bloques |
+| F2 Modelos | ✅ | **99,993 %** de cobertura de geometría (100 509 instancias; sólo falla un bloque de un mod) |
+| F3 Texturas | ✅ | 0 texturas ausentes en los 27 esquemáticos; atlas potencia de dos con relleno |
+| F4 Malla | ✅ | caras CCW con normal hacia fuera; culling contra vecino cúbico opaco |
+| F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
+| F6 API + CLI | ✅ | `info`, `list`, `export`, `view`; API FastAPI con visor estático |
+| F7 Visor | ✅ | funciona sin npm (importmap CDN) y con Vite; validado con capturas headless |
+| F8 Tests | 🚧 | 179 tests; pendiente: golden de conteos, `uvlock`, corte por capas, wireframe |
+
+Módulos reales (los nombres del plan cambiaron al implementar):
+
+```
+src/lite2obj/
+  nbt.py         lector NBT
+  litematic.py   parser .litematic
+  paths.py       detección de instalaciones
+  assets.py      pila de recursos (jar + packs)
+  models.py      blockstates y modelos
+  fallbacks.py   geometría sustituta (fluidos, bloques de entidad)
+  aliases.py     bloques renombrados
+  textures.py    atlas, sprites teñidos, transparencia
+  mesh.py        malla y culling
+  export.py      OBJ + MTL + atlas        (el plan decía export_obj.py)
+  pipeline.py    alto nivel CLI/API + búfer binario del visor
+  server.py      FastAPI + estáticos      (el plan decía api.py)
+  cli.py         lite2obj info|list|export|view
+web/             visor Three.js (index.html + src/, también proyecto Vite)
+```
+
+Desviaciones respecto al plan:
+
+- **GLB**: descartado en v1 (`export_gltf.py` no existe). El OBJ cubre el objetivo de Blender.
+- **Visor sin npm**: `web/index.html` usa un *importmap* al CDN, así que el servidor de Python
+  sirve el visor tal cual; `web/package.json` + `vite.config.js` habilitan el flujo con npm
+  para desarrollo (proxy de `/api`).
+- **`uvlock`**: los modelos con `uvlock` (esquinas de escaleras `inner_*`/`outer_*`) usan las
+  UVs del modelo en lugar de bloquear el giro; es la única concesión conocida.
+- **Entidades y `Items` de cofres**: fuera de v1, como estaba previsto.
+- **Tintes**: se aplican multiplicando la textura (sprites teñidos dentro del atlas), en vez
+  de colores por vértice, para que el color viaje en el OBJ sin nada extra.
+
+Culling medido (caras sin descartar → con descarte):
+
+| Esquemático | Caras | Reducción | Tiempo |
+|---|---|---|---|
+| Diabu_coastal_house | 58 495 → 48 630 | 17 % | 0,37 s |
+| Diaburita_Mediterranean_villa | 106 206 → 82 889 | 22 % | 0,52 s |
+| medieval_tavern | 151 786 → 106 677 | 30 % | 0,57 s |
+
+(No llega al >50 % que estimaba el plan porque son edificios huecos: la mayoría de caras ya
+eran exteriores. El descarte sí elimina todas las caras entre bloques opacos contiguos.)
+
+---
+
 ## Entorno verificado (datos reales de esta máquina)
 
 - **`.litematic`**: NBT comprimido con gzip. Formato confirmado sobre

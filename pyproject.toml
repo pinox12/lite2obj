@@ -24,6 +24,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.0",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
@@ -40,6 +41,12 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = [
+    # Starlette avisa de que prefiere httpx2; con httpx el TestClient sigue funcionando.
+    # El aviso es un UserWarning emitido al importar, así que se filtra por módulo.
+    "ignore::UserWarning:starlette.testclient",
+    "ignore::UserWarning:fastapi.testclient",
+]
 
 [tool.mypy]
 python_version = "3.14"
