@@ -9,13 +9,13 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | Fase | Descripción | Estado |
 |------|-------------|--------|
 | F1 | Parser `.litematic` (NBT + bit-packing YZX) | ✅ hecho |
-| F2 | Resolución de blockstates/modelos desde el client jar | ⏳ pendiente |
+| F2 | Resolución de blockstates/modelos desde el client jar | ✅ hecho |
 | F3 | Texturas y atlas | ⏳ pendiente |
 | F4 | Malla y culling por `cullface` | ⏳ pendiente |
 | F5 | Export OBJ + MTL + atlas | ⏳ pendiente |
 | F6 | API (FastAPI) + CLI | 🚧 CLI `info`/`list` listo |
 | F7 | Visor web Three.js | ⏳ pendiente |
-| F8 | Tests | 🚧 59 tests |
+| F8 | Tests | 🚧 91 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -75,9 +75,15 @@ src/lite2obj/
   nbt.py         lector NBT (sin dependencias)
   litematic.py   parser .litematic -> regiones, paleta, voxels
   paths.py       detección de instalaciones de Minecraft
+  assets.py      pila de recursos (jar + resource packs)
+  models.py      blockstates y modelos (variants/multipart, rotaciones)
+  fallbacks.py   geometría sustituta (fluidos, bloques de entidad)
+  aliases.py     bloques renombrados entre versiones
   cli.py         interfaz de línea de comandos
 tests/
   test_nbt.py                 lector NBT contra un escritor de tests
   test_litematic.py           bit-packing, tamaños negativos, multi-región, fixture real
+  test_models.py              rotaciones, variants/multipart, parent, texturas
   test_schematics_integration.py  valida todos los .litematic de la máquina
+  test_coverage_integration.py    cobertura de geometría sobre los esquemáticos
 ```
