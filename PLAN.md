@@ -1,0 +1,196 @@
+# Plan de proyecto: `lite2obj`
+
+**Objetivo**: convertir un archivo `.litematic` (mod Litematica) en un render 3D en el
+navegador y exportarlo a un objeto importable en Blender (OBJ + MTL + texturas), con
+fidelidad de modelos de bloque inspirada en [j-mc-2-obj](https://github.com/jmc2obj/j-mc-2-obj).
+
+**Stack**: Python 3.14 gestionado con **uv** (FastAPI + Pillow + numpy) + visor **Three.js**.
+Sin Java.
+
+---
+
+## Entorno verificado (datos reales de esta máquina)
+
+- **`.litematic`**: NBT comprimido con gzip. Formato confirmado sobre
+  `almacen bonito 1x4x4.litematic`:
+  raíz con `Regions -> {Position, Size, BlockStatePalette, BlockStates, TileEntities, Entities}`,
+  `Metadata`, `Version=7`, `SubVersion=1`, `MinecraftDataVersion`.
+  Bit-packing **YZX** con `bits = ceil(log2(palette_size))`; el fixture decodifica
+  **42 bloques no-aire = 42** de `Metadata.TotalBlocks`. Validado.
+- **Schematics disponibles**: 27 archivos en
+  `~/.local/share/ModrinthApp/profiles/Fabulously Optimized 1.0.0/schematics/`.
+- **Client jar 26.3**: `~/.local/share/ModrinthApp/meta/versions/26.3-0.19.5/26.3-0.19.5.jar`
+  con **1289 blockstates, 2884 modelos de bloque, 1406 texturas de bloque**.
+  Formato clásico confirmado: `variants`/`multipart` -> `model` con `parent`, `textures`,
+  `elements`, `cullface`, `tintindex`, rotaciones `x`/`y`/`uvlock`.
+- **Assets externos**: `~/.local/share/ModrinthApp/meta/assets/` con `indexes/34.json`
+  (el `assetIndex` que declara `~/.minecraft/versions/26.3/26.3.json`).
+- **Resource packs**: son `.zip` con `assets/minecraft/{blockstates,models,textures}`
+  (Mizuno's 16x tiene ~2965 entradas). El pack es de 1.20.1 (`pack_format 15`) mientras el
+  juego es 26.3 -> hace falta **fallback por-asset a vanilla**. Texturas de Mizuno's en PNG
+  modo paleta (`P`), hay que convertir a RGBA.
+- **Toolchain**: `uv 0.12.18` (`~/.local/bin/uv`), Python 3.14.8, Node 26, Blender 5.2,
+  Pillow 13, numpy 2.5. Red disponible para `uv add`.
+
+### Rutas de detección automática (sobrescribibles por CLI/env)
+
+| Qué | Ruta |
+|---|---|
+| jar | `~/.local/share/ModrinthApp/meta/versions/26.3-0.19.5/26.3-0.19.5.jar` |
+| packs | `~/.local/share/ModrinthApp/profiles/*/resourcepacks/*.zip` |
+| assets | `~/.local/share/ModrinthApp/meta/assets/` |
+| schematics | `~/.local/share/ModrinthApp/profiles/*/schematics/` |
+
+---
+
+## Estructura (layout `src/` de uv)
+
+```
+lite2obj/
+├── pyproject.toml          # [project] + dependencias + [project.scripts] + [tool.*]
+├── uv.lock                 # lockfile commiteado
+├── .python-version         # 3.14
+├── .gitignore
+├── README.md
+├── src/lite2obj/
+│   ├── __init__.py
+│   ├── nbt.py              # lector NBT sin dependencias (gzip/zlib/raw)
+│   ├── litematic.py        # regiones, paleta, voxels YZX, tile entities, metadata
+│   ├── assets.py           # pila de recursos (jar + packs), indice perezoso, fallback
+│   ├── models.py           # blockstate: variants/multipart, parents, rotaciones
+│   ├── textures.py         # PNG->RGBA, atlas, animacion (1er frame), tint
+│   ├── mesh.py             # voxel->geometria, culling por cullface, UVs al atlas
+│   ├── export_obj.py       # OBJ + MTL + atlas.png
+│   ├── export_gltf.py      # GLB (extra)
+│   ├── cli.py              # lite2obj info|export|view
+│   └── api.py              # FastAPI
+├── web/                    # visor Three.js (Vite; gestionado con npm)
+└── tests/                  # fixtures + golden tests
+```
+
+---
+
+## Tooling con uv
+
+Bootstrap inicial:
+
+```bash
+cd /home/pinox12/Documentos/lite2obj
+git init
+uv init --lib --name lite2obj --python 3.14
+uv python pin 3.14
+uv add fastapi "uvicorn[standard]" pillow numpy python-multipart
+uv add --dev pytest pytest-cov ruff mypy
+uv lock
+```
+
+`pyproject.toml` incluye:
+
+```toml
+[project.scripts]
+lite2obj = "lite2obj.cli:main"
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+```
+
+| Tarea | Comando |
+|---|---|
+| Instalar/sincronizar | `uv sync` |
+| CLI info | `uv run lite2obj info esquema.litematic` |
+| Exportar | `uv run lite2obj export esquema.litematic -o out.obj --pack "Mizuno's..."` |
+| API + visor | `uv run uvicorn lite2obj.api:app --reload` |
+| Tests | `uv run pytest` |
+| Lint/format | `uv run ruff check . && uv run ruff format .` |
+| Tipo-check | `uv run mypy src` |
+
+Notas:
+- `uv.lock` y `.python-version` se commitean.
+- `.gitignore`: `.venv/`, `__pycache__/`, `dist/`, `web/node_modules/`.
+- El visor web usa **npm/Vite** (uv no aplica a JS): dos entornos, `uv` para Python y
+  `npm` para `web/`.
+
+---
+
+## Fases y "definicion de terminado"
+
+### F1 · Parseo (base solida)
+- `nbt.py`: todos los tags, autodeteccion de compresion.
+- `litematic.py`: multi-region con `Position`/`Size` (incl. tamanos negativos = espejado),
+  despaquetado YZX, propiedades de bloque, `TileEntities`, `Metadata`.
+- **DoD**: sobre `almacen bonito 1x4x4.litematic` reporta exactamente 42 bloques; corre
+  sobre los 27 schematics sin excepciones.
+
+### F2 · Resolucion de modelos (fidelidad)
+- `assets.py`: capa vanilla (jar) + capas de packs ordenadas por prioridad; lookup
+  `ruta -> (origen, entrada)` con fallback automatico si el pack 1.20.1 no tiene el asset.
+- `models.py`: `variants` (match exacto y fallback por subconjunto/`""`), `multipart` con
+  `when`, campos `x`/`y`/`uvlock`/`weight`, cadena de `parent` hasta `block/block`, merge de
+  `textures`, `elements` con `rotation` (origin/axis/angle/rescale), `cullface`, `tintindex`.
+- **DoD**: resolver >98% de los bloques de los 27 schematics; reporte de bloques no soportados.
+
+### F3 · Texturas y atlas
+- Carga PNG (incl. modo paleta `P`), animacion -> primer frame, incluye
+  `textures/entity/*` (cofres, carteles).
+- Atlas con packer propio + mapeo UV (0-16 -> coords de atlas).
+- Tint fijo vanilla por `tintindex` (grass/foliage/water), conmutable.
+- **DoD**: atlas con <5% de texturas en `missingno`; UVs sin costuras entre bloques.
+
+### F4 · Malla y culling
+- Rotar elementos segun el variant; convertir 0-16 -> metros (÷16).
+- **Culling por `cullface`**: si el vecino es cubo completo opaco, se omite la cara
+  (lo que hacia j-mc-2-obj). Deteccion de oclusor cacheada por `id+propiedades`;
+  tratamiento de transparentes/translucidos.
+- **DoD**: la casa de ejemplo pierde >50% de caras internas y renderiza sin huecos.
+
+### F5 · Export a Blender
+- `export_obj.py`: `.obj` + `.mtl` (1 material con `map_Kd atlas.png`) + atlas, caras quads.
+- Opciones: `--center`, `--scale`, `--up y|z`, `--no-cull`, `--grouping none|type|region`.
+- **DoD**: el OBJ abre en Blender 5.2 con UVs y textura correctas (probado con el Blender
+  instalado).
+
+### F6 · API + CLI
+- CLI: `lite2obj info|export|view`.
+- API: subir schematic -> metadata -> mallas (buffers binarios) -> texturas -> export;
+  endpoints para listar packs y rutas detectadas.
+- **DoD**: `uv run uvicorn` arranca y sirve todo lo que el visor necesita.
+
+### F7 · Visor web (Three.js)
+- Drop de archivo, `OrbitControls`, grid, iluminacion estilo Minecraft
+  (arriba 1.0; lados 0.8/0.6; abajo 0.5).
+- Panel: metadata (nombre, autor, tamano, nº bloques), lista de materiales con miniatura y
+  recuento, slider de corte por capa Y, toggle transparentes, wireframe, exportar, captura PNG.
+- Rendimiento: `InstancedMesh` agrupando por modelo+rotacion, chunking por secciones de 16³,
+  frustum culling.
+- **DoD**: `Diabu_coastal_house.litematic` gira fluido (60 fps) y exporta.
+
+### F8 · Tests
+- Unitarios: NBT, bit-array (fixture de 42 bloques), matching de variants, cadena de parents,
+  logica de culling.
+- Golden: conteos de vertices/caras del fixture.
+- Integracion: lotes sobre los 27 schematics buscando errores de resolucion.
+
+---
+
+## Riesgos conocidos
+
+| Riesgo | Mitigacion |
+|---|---|
+| Pack 1.20.1 != juego 26.3 | Fallback por-asset a vanilla (comportamiento nativo de MC) |
+| OBJ gigante en builds grandes | Culling + `--grouping`; greedy meshing como fase futura |
+| Sin datos de bioma en `.litematic` | Tints fijos conmutables |
+| Entidades e `Items` dentro de cofres | Fuera de v1; fase posterior opcional |
+| Cambios de formato de modelos en 26.3 | Verificado: formato clasico intacto |
+
+---
+
+## Orden de entrega
+
+1. F1 + F2 (parser + modelos)
+2. F3 + F4 (texturas + malla)
+3. F5 + F6 (export + API/CLI)
+4. F7 (visor)
+5. F8 (tests)
