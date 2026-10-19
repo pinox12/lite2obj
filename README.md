@@ -2,7 +2,8 @@
 
 Renderiza esquemáticos de **Minecraft Litematica** (`.litematic`) en 3D y los convierte en
 un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
-[j-mc-2-obj](https://github.com/jmc2obj/j-mc-2-obj), pero como proyecto propio en Python + web.
+[j-mc-2-obj](https://github.com/jmc2obj/j-mc-2-obj), como app de escritorio propia en Python
+(PySide6 + OpenGL de Qt).
 
 ## Estado
 
@@ -13,9 +14,9 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F3 | Texturas y atlas | ✅ hecho |
 | F4 | Malla y culling por `cullface` | ✅ hecho |
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
-| F6 | API (FastAPI) + CLI | ✅ hecho |
-| F7 | Visor web Three.js | ✅ hecho |
-| F8 | Tests | ✅ 202 tests |
+| F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
+| F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
+| F8 | Tests | ✅ 195 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -24,6 +25,7 @@ El plan completo está en [`PLAN.md`](PLAN.md).
 - [uv](https://docs.astral.sh/uv/) y Python 3.14 (uv lo instala si hace falta).
 - Un client jar de Minecraft para resolver modelos y texturas (F2+). En esta máquina se
   detecta automáticamente.
+- OpenGL 3.3 para la vista 3D (la CLI de export funciona sin GPU).
 
 ## Instalación
 
@@ -44,9 +46,11 @@ uv run lite2obj list --packs
 uv run lite2obj export esquema.litematic salida/ --name casa
 uv run lite2obj export esquema.litematic salida/ --z-up --group-by block
 uv run lite2obj export esquema.litematic salida/ --packs "Mizunos 16 Craft JE_1.20.1-1.0_230720"
+uv run lite2obj export esquema.litematic salida/ --atlas-scale 2 --scale 0.5
 
-# Abre el visor web en http://127.0.0.1:8000
-uv run lite2obj view --open
+# Abre la aplicación de escritorio
+uv run lite2obj gui
+uv run lite2obj gui esquema.litematic
 ```
 
 Ejemplo de salida de `info`:
@@ -88,24 +92,37 @@ Notas de fidelidad:
 - **`uvlock`**: las esquinas de escalera (`inner_*`/`outer_*`) usan las UV del modelo en vez de
   bloquear el giro; es la única concesión conocida del conversor.
 
-### Visor web
+### Aplicación de escritorio
 
 ```bash
-uv run lite2obj view --port 8000 --open
+uv run lite2obj gui esquema.litematic
+# lanzador directo (mismo resultado):
+lite2obj-gui esquema.litematic
 ```
 
-El visor no necesita compilación: `web/index.html` resuelve Three.js con un *importmap* del
-CDN. Permite elegir esquemático, arrastrar uno propio, activar/desactivar resource packs,
-descartar caras ocultas, ver estadísticas y descargar el OBJ. También acepta
-`?path=/ruta/al/esquema.litematic` para enlazar directamente a uno.
+La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
 
-Para desarrollar el visor con recarga en caliente (dos entornos: `uv` para Python, `npm` para
-JS):
+- **Esquemático**: desplegable con los `.litematic` detectados, botón *Abrir…* y arrastrar y
+  soltar sobre la ventana.
+- **Resource packs**: lista con casillas; arriba tiene más prioridad y los assets que falten
+  caen al vanilla.
+- **Vista y render**: descartar caras ocultas, tintes de bioma, resolución del atlas
+  (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y corte por capas Y.
+- **Exportar a Blender**: carpeta, nombre, agrupación, escala y `Z arriba` (nativo de Blender).
 
-```bash
-uv run lite2obj view --port 8000     # backend
-cd web && npm install && npm run dev # visor en :5173 con proxy a /api
-```
+La vista 3D se renderiza con el OpenGL nativo de Qt (PySide6), no con el navegador: órbita con
+el botón izquierdo, desplazar con el central/derecho (o `Shift`+izquierdo), zoom con la rueda
+y doble clic para reencuadrar. Atajos: `F5` renderizar, `Ctrl+E` exportar, `Ctrl+Shift+S`
+captura, `F` reencuadrar, `G` rejilla, `W` wireframe.
+
+En Linux con NVIDIA bajo Wayland la app usa `QT_QPA_PLATFORM=xcb` (XWayland) automáticamente
+porque la creación del contexto EGL falla; se puede desactivar definiendo esa variable antes.
+
+### CLI sin interfaz
+
+Todo lo que hace la app está disponible por línea de comandos: `info`, `list`, `export` y
+`gui`. Sirve para automatizar exportaciones en máquinas sin escritorio (la vista 3D no se
+usa, sólo la malla y el OBJ).
 
 ## Desarrollo
 
@@ -137,10 +154,9 @@ src/lite2obj/
   textures.py    atlas de texturas, sprites teñidos
   mesh.py        malla del esquemático (caras, UV, culling)
   export.py      OBJ + MTL + atlas
-  pipeline.py    alto nivel (CLI y API) + búfer binario del visor
-  server.py      FastAPI: API + visor estático
+  pipeline.py    alto nivel (CLI y app) + búfer binario del visor
   cli.py         interfaz de línea de comandos
-web/             visor Three.js (index.html, src/main.js, style.css)
+  gui/           app de escritorio (viewports OpenGL, cámara, ventana Qt)
 tests/
   test_nbt.py                 lector NBT contra un escritor de tests
   test_litematic.py           bit-packing, tamaños negativos, multi-región, fixture real
@@ -148,26 +164,12 @@ tests/
   test_textures.py            empaquetado del atlas, tintes, transparencia
   test_mesh.py                orientación de caras/UV, culling, malla real
   test_export.py              OBJ/MTL, winding, deduplicado, agrupación
-  test_server.py              API, caché de mallas, búfer binario
+  test_gui.py                 cámara, buffers del viewport y arranque offscreen
   test_cli.py                 comandos de la CLI
   test_schematics_integration.py  valida todos los .litematic de la máquina
   test_coverage_integration.py    cobertura de geometría sobre los esquemáticos
 ```
 
-## API
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/api/health` | versión y jar detectado |
-| `GET` | `/api/packs` | resource packs disponibles |
-| `GET` | `/api/schematics` | `.litematic` encontrados en el disco |
-| `POST` | `/api/schematics` | sube un `.litematic` (multipart) |
-| `POST` | `/api/render` | renderiza (`path` o `upload_id`, packs, opciones) |
-| `GET` | `/api/mesh/{id}` | metadatos: tamaño, partes del búfer, grupos, estadísticas |
-| `GET` | `/api/mesh/{id}/buffer` | búfer binario de vértices e índices |
-| `GET` | `/api/mesh/{id}/atlas.png` | atlas de texturas |
-| `GET` | `/api/mesh/{id}/export.obj` | OBJ al vuelo |
-
-Los triángulos llegan ordenados por modo de transparencia (opaco, *cutout*, translúcido) en un
-único búfer: el visor sólo tiene que crear los `BufferAttribute` con los desplazamientos que
-indica el JSON y dibujar un grupo por modo.
+Los triángulos se ordenan por modo de transparencia (opaco, *cutout*, translúcido) dentro de
+la sopa de vértices, de modo que el visor dibuja un grupo por modo sin ordenar nada en tiempo
+real.

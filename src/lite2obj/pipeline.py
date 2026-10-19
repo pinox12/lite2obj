@@ -1,9 +1,9 @@
 """Pipeline completo: ``.litematic`` -> malla -> OBJ/JSON (F6).
 
 Reúne las piezas de las fases anteriores en funciones de alto nivel que usan tanto la CLI como
-el servidor web. Aquí también vive el formato binario que consume el visor: los vértices van en
-un único búfer contiguo y el JSON sólo lleva el mapa de partes (nombre, tipo, desplazamiento),
-de modo que el navegador crea los ``BufferAttribute`` sin copiar nada.
+la aplicación de escritorio. Aquí también vive el formato binario que consume el visor: los
+vértices van en un único búfer contiguo y el JSON sólo lleva el mapa de partes (nombre, tipo,
+desplazamiento), de modo que el visor crea los atributos sin copiar nada.
 """
 
 from __future__ import annotations
@@ -51,6 +51,7 @@ class RenderOptions:
     cull: bool = True
     tint: bool = True
     padding: int = 2
+    atlas_scale: int = 1
     max_quads: int = 0
     fallback_mode: str = "cube"
 
@@ -59,6 +60,7 @@ class RenderOptions:
             cull=self.cull,
             tint=self.tint,
             padding=self.padding,
+            atlas_scale=self.atlas_scale,
             max_quads=self.max_quads,
             fallback_mode=self.fallback_mode,
         )
@@ -96,6 +98,7 @@ def export(
     name: str | None = None,
     up_axis: str = "y",
     group_by: str = "none",
+    scale: float = 1.0,
     resources: ResourceManager | None = None,
 ) -> ExportResult:
     """Renderiza y escribe ``<name>.obj``, ``<name>.mtl`` y ``atlas.png``."""
@@ -106,6 +109,7 @@ def export(
         name=name or _safe_name(document.name or getattr(source, "stem", None) or "model"),
         up_axis=up_axis,
         group_by=group_by,
+        scale=scale,
     )
     return export_obj(mesh, directory, export_options)
 
@@ -177,7 +181,7 @@ def mesh_meta(mesh: Mesh) -> dict[str, Any]:
 
 
 def mesh_bundle(mesh: Mesh) -> tuple[bytes, dict[str, Any]]:
-    """Búfer y metadatos en una sola pasada (lo que usa el servidor)."""
+    """Búfer y metadatos en una sola pasada (lo que usa el visor)."""
     buffer, parts, groups = mesh_parts(mesh)
     return buffer, _meta(mesh, parts, groups)
 

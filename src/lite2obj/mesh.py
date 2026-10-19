@@ -256,6 +256,7 @@ class MeshOptions:
     tint: bool = True
     tint_colors: dict[str, tuple[int, int, int]] | None = None
     padding: int = 2
+    atlas_scale: int = 1
     max_quads: int = 0  # 0 = sin límite
     progress: Callable[[int, int], None] | None = None
 
@@ -303,7 +304,11 @@ class MeshBuilder:
         self.resolver = resolver
         self.options = options or MeshOptions()
         if atlas is None:
-            atlas = TextureAtlas(resolver.resources, padding=self.options.padding)
+            atlas = TextureAtlas(
+                resolver.resources,
+                padding=self.options.padding,
+                scale=self.options.atlas_scale,
+            )
         self.atlas = atlas
         self.tints = TintResolver(
             enabled=self.options.tint,

@@ -8,15 +8,14 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.146.0",
     "numpy>=2.5.4",
     "pillow>=13.0.0",
-    "python-multipart>=0.0.32",
-    "uvicorn[standard]>=0.54.0",
+    "pyside6-essentials>=6.12.0",
 ]
 
 [project.scripts]
 lite2obj = "lite2obj.cli:main"
+lite2obj-gui = "lite2obj.gui:main"
 
 [build-system]
 requires = ["uv_build>=0.12.18,<0.13.0"]
@@ -24,7 +23,6 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.0",
     "mypy>=2.4.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
@@ -41,12 +39,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-filterwarnings = [
-    # Starlette avisa de que prefiere httpx2; con httpx el TestClient sigue funcionando.
-    # El aviso es un UserWarning emitido al importar, así que se filtra por módulo.
-    "ignore::UserWarning:starlette.testclient",
-    "ignore::UserWarning:fastapi.testclient",
-]
 
 [tool.mypy]
 python_version = "3.14"

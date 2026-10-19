@@ -1,19 +1,19 @@
 # Plan de proyecto: `lite2obj`
 
-**Objetivo**: convertir un archivo `.litematic` (mod Litematica) en un render 3D en el
-navegador y exportarlo a un objeto importable en Blender (OBJ + MTL + texturas), con
+**Objetivo**: convertir un archivo `.litematic` (mod Litematica) en un render 3D en una app de
+escritorio y exportarlo a un objeto importable en Blender (OBJ + MTL + texturas), con
 fidelidad de modelos de bloque inspirada en [j-mc-2-obj](https://github.com/jmc2obj/j-mc-2-obj).
 
-**Stack**: Python 3.14 gestionado con **uv** (FastAPI + Pillow + numpy) + visor **Three.js**.
-Sin Java.
+**Stack**: Python 3.14 gestionado con **uv** (PySide6 + Qt OpenGL + Pillow + numpy). Sin Java,
+sin navegador.
 
 ---
 
 ## Estado (v1 funcional de punta a punta)
 
 F1–F8 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
-texturas/atlas → malla con culling → OBJ+MTL+atlas y visor web. 202 tests, `ruff` y `mypy`
-limpios.
+texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 195
+tests, `ruff` y `mypy` limpios.
 
 | Fase | Estado | Nota |
 |---|---|---|
@@ -22,9 +22,9 @@ limpios.
 | F3 Texturas | ✅ | 0 texturas ausentes en los 27 esquemáticos; atlas potencia de dos con relleno |
 | F4 Malla | ✅ | caras CCW con normal hacia fuera; culling contra vecino cúbico opaco |
 | F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
-| F6 API + CLI | ✅ | `info`, `list`, `export`, `view`; API FastAPI con visor estático |
-| F7 Visor | ✅ | funciona sin npm (importmap CDN) y con Vite; validado con capturas headless |
-| F8 Tests | ✅ | 202 tests; golden de conteos, `uvlock` documentado; pendiente sólo capas/wireframe (extras) |
+| F6 CLI | ✅ | `info`, `list`, `export` |
+| F7 App de escritorio | ✅ | PySide6 + OpenGL de Qt; órbita, capas, wireframe, captura y export desde la UI |
+| F8 Tests | ✅ | 195 tests; golden de conteos, `uvlock` documentado |
 
 Módulos reales (los nombres del plan cambiaron al implementar):
 
@@ -40,18 +40,17 @@ src/lite2obj/
   textures.py    atlas, sprites teñidos, transparencia
   mesh.py        malla y culling
   export.py      OBJ + MTL + atlas        (el plan decía export_obj.py)
-  pipeline.py    alto nivel CLI/API + búfer binario del visor
-  server.py      FastAPI + estáticos      (el plan decía api.py)
-  cli.py         lite2obj info|list|export|view
-web/             visor Three.js (index.html + src/, también proyecto Vite)
+  pipeline.py    alto nivel CLI/app + búfer binario del visor
+  cli.py         lite2obj info|list|export|gui
+  gui/           app de escritorio: app.py (ventana), viewport.py (GL), camera.py
 ```
 
 Desviaciones respecto al plan:
 
 - **GLB**: descartado en v1 (`export_gltf.py` no existe). El OBJ cubre el objetivo de Blender.
-- **Visor sin npm**: `web/index.html` usa un *importmap* al CDN, así que el servidor de Python
-  sirve el visor tal cual; `web/package.json` + `vite.config.js` habilitan el flujo con npm
-  para desarrollo (proxy de `/api`).
+- **Render 3D**: en vez del visor web Three.js, la app usa **OpenGL nativo de Qt** dentro de un
+  `QOpenGLWidget` (PySide6). Un contexto GL externo (p. ej. moderngl/glcontext) puede crear su
+  propio framebuffer y el dibujo nunca se presenta; por eso se usan las clases `QOpenGL*`.
 - **`uvlock`**: los modelos con `uvlock` (esquinas de escaleras `inner_*`/`outer_*`) usan las
   UVs del modelo en lugar de bloquear el giro; es la única concesión conocida.
 - **Variants por posición**: los bloques de terreno (`stone`, `dirt`, `grass_block`…) traen
@@ -62,7 +61,7 @@ Desviaciones respecto al plan:
   hay 95 modelos vanilla que rotan elementos (`block/cross`, fans de coral, soportes…) y otros
   que además usan `rescale`; girar sólo las posiciones dejaba esas caras mal sombreadas.
 - **Caras coincidentes**: si dos caras del *mismo* bloque comparten plano (la hierba y su
-  *overlay* lateral), se hornean en una sola textura y una sola cara; así el visor y Blender
+  *overlay* lateral), se hornean en una sola textura y una sola cara; así Blender y el visor
   enseñan lo mismo. Entre bloques distintos no se tocan (Minecraft también dibuja las dos).
 - **Entidades y `Items` de cofres**: fuera de v1, como estaba previsto.
 - **Tintes**: se aplican multiplicando la textura (sprites teñidos dentro del atlas), en vez
@@ -134,11 +133,13 @@ lite2obj/
 │   ├── models.py           # blockstate: variants/multipart, parents, rotaciones
 │   ├── textures.py         # PNG->RGBA, atlas, animacion (1er frame), tint
 │   ├── mesh.py             # voxel->geometria, culling por cullface, UVs al atlas
-│   ├── export_obj.py       # OBJ + MTL + atlas.png
-│   ├── export_gltf.py      # GLB (extra)
-│   ├── cli.py              # lite2obj info|export|view
-│   └── api.py              # FastAPI
-├── web/                    # visor Three.js (Vite; gestionado con npm)
+│   ├── export.py           # OBJ + MTL + atlas.png
+│   ├── pipeline.py         # alto nivel CLI/app + bufer binario del visor
+│   ├── cli.py              # lite2obj info|list|export|gui
+│   └── gui/                # app de escritorio (PySide6 + OpenGL de Qt)
+│       ├── app.py          # ventana, panel de opciones, tareas en segundo plano
+│       ├── viewport.py     # QOpenGLWidget: shaders, buffers, capas, wireframe
+│       └── camera.py       # camara orbital y matrices
 └── tests/                  # fixtures + golden tests
 ```
 
@@ -153,7 +154,7 @@ cd /home/pinox12/Documentos/lite2obj
 git init
 uv init --lib --name lite2obj --python 3.14
 uv python pin 3.14
-uv add fastapi "uvicorn[standard]" pillow numpy python-multipart
+uv add pyside6-essentials pillow numpy
 uv add --dev pytest pytest-cov ruff mypy
 uv lock
 ```
@@ -163,6 +164,7 @@ uv lock
 ```toml
 [project.scripts]
 lite2obj = "lite2obj.cli:main"
+lite2obj-gui = "lite2obj.gui:main"
 
 [tool.ruff]
 line-length = 100
@@ -175,17 +177,16 @@ testpaths = ["tests"]
 |---|---|
 | Instalar/sincronizar | `uv sync` |
 | CLI info | `uv run lite2obj info esquema.litematic` |
-| Exportar | `uv run lite2obj export esquema.litematic -o out.obj --pack "Mizuno's..."` |
-| API + visor | `uv run uvicorn lite2obj.api:app --reload` |
+| Exportar | `uv run lite2obj export esquema.litematic salida/ --packs "..."` |
+| App de escritorio | `uv run lite2obj gui` |
 | Tests | `uv run pytest` |
 | Lint/format | `uv run ruff check . && uv run ruff format .` |
 | Tipo-check | `uv run mypy src` |
 
 Notas:
 - `uv.lock` y `.python-version` se commitean.
-- `.gitignore`: `.venv/`, `__pycache__/`, `dist/`, `web/node_modules/`.
-- El visor web usa **npm/Vite** (uv no aplica a JS): dos entornos, `uv` para Python y
-  `npm` para `web/`.
+- `.gitignore`: `.venv/`, `__pycache__/`, `dist/`, salidas `*.obj`/`*.mtl`.
+- Un único entorno (`uv`); ya no hay toolchain de Node.
 
 ---
 
@@ -226,26 +227,25 @@ Notas:
 - **DoD**: el OBJ abre en Blender 5.2 con UVs y textura correctas (probado con el Blender
   instalado).
 
-### F6 · API + CLI
-- CLI: `lite2obj info|export|view`.
-- API: subir schematic -> metadata -> mallas (buffers binarios) -> texturas -> export;
-  endpoints para listar packs y rutas detectadas.
-- **DoD**: `uv run uvicorn` arranca y sirve todo lo que el visor necesita.
+### F6 · CLI
+- CLI: `lite2obj info|list|export|gui`.
+- `export` escribe OBJ + MTL + atlas; sin interfaz gráfica ni servidor.
+- **DoD**: `uv run lite2obj export` produce un OBJ importable en Blender sin abrir la app.
 
-### F7 · Visor web (Three.js)
-- Drop de archivo, `OrbitControls`, grid, iluminacion estilo Minecraft
-  (arriba 1.0; lados 0.8/0.6; abajo 0.5).
-- Panel: metadata (nombre, autor, tamano, nº bloques), lista de materiales con miniatura y
-  recuento, slider de corte por capa Y, toggle transparentes, wireframe, exportar, captura PNG.
-- Rendimiento: `InstancedMesh` agrupando por modelo+rotacion, chunking por secciones de 16³,
-  frustum culling.
-- **DoD**: `Diabu_coastal_house.litematic` gira fluido (60 fps) y exporta.
+### F7 · App de escritorio (PySide6 + OpenGL de Qt)
+- Viewport `QOpenGLWidget` con órbita, zoom, pan, rejilla, ejes e iluminación estilo
+  Minecraft (ambiente + luz principal + relleno).
+- Panel al estilo j-mc-2-obj: esquemático, resource packs, culling, tintes, resolución del
+  atlas, texturas suavizadas, corte por capas Y, wireframe, captura PNG y export.
+- Tareas (render y export) en `QThreadPool` para no bloquear la ventana.
+- **DoD**: `Diabu_coastal_house.litematic` gira fluido y exporta desde la UI.
 
 ### F8 · Tests
 - Unitarios: NBT, bit-array (fixture de 42 bloques), matching de variants, cadena de parents,
-  logica de culling, normales contra el giro de los vértices.
+  logica de culling, normales contra el giro de los vértices, cámara y buffers del viewport.
 - Golden: conteos de vertices/caras del fixture.
 - Integracion: lotes sobre los 27 schematics buscando errores de resolucion.
+- Arranque de la app en `offscreen` dentro de un subproceso.
 
 ---
 
@@ -265,6 +265,6 @@ Notas:
 
 1. F1 + F2 (parser + modelos)
 2. F3 + F4 (texturas + malla)
-3. F5 + F6 (export + API/CLI)
-4. F7 (visor)
+3. F5 + F6 (export + CLI)
+4. F7 (app de escritorio)
 5. F8 (tests)

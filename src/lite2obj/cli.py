@@ -5,7 +5,7 @@ Uso::
     lite2obj info <archivo.litematic> [--blocks N]
     lite2obj list
     lite2obj export <archivo.litematic> [destino] [--packs ...] [--z-up] [--group-by ...]
-    lite2obj view [<archivo.litematic>] [--host H] [--port P] [--open]
+    lite2obj gui [<archivo.litematic>]
 """
 
 from __future__ import annotations
@@ -87,7 +87,12 @@ def cmd_export(args: argparse.Namespace) -> int:
     from .pipeline import RenderOptions, export
 
     destination = args.destination or (args.path.parent / f"{args.path.stem}_obj")
-    options = RenderOptions(packs=args.packs, cull=not args.no_cull, tint=not args.no_tint)
+    options = RenderOptions(
+        packs=args.packs,
+        cull=not args.no_cull,
+        tint=not args.no_tint,
+        atlas_scale=args.atlas_scale,
+    )
     result = export(
         args.path,
         destination,
@@ -95,6 +100,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         name=args.name,
         up_axis="z" if args.z_up else "y",
         group_by=args.group_by,
+        scale=args.scale,
     )
     print(f"OBJ    {result.obj}  ({_human_bytes(result.bytes_written)})")
     if result.mtl:
@@ -108,12 +114,10 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_view(args: argparse.Namespace) -> int:
-    from .server import run
+def cmd_gui(args: argparse.Namespace) -> int:
+    from .gui import run
 
-    if args.path is not None:
-        print("Nota: con el servidor en marcha, elige el esquemático en la barra lateral.")
-    run(host=args.host, port=args.port, open_browser=args.open)
+    run(args.path)
     return 0
 
 
@@ -153,14 +157,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export.add_argument("--no-cull", action="store_true", help="no descarta caras ocultas")
     export.add_argument("--no-tint", action="store_true", help="desactiva los tintes de bioma")
+    export.add_argument(
+        "--atlas-scale",
+        type=int,
+        choices=[1, 2, 4],
+        default=1,
+        help="multiplica la resolución de las texturas del atlas",
+    )
+    export.add_argument("--scale", type=float, default=1.0, help="escala de la geometría exportada")
     export.set_defaults(func=cmd_export)
 
-    view = sub.add_parser("view", help="abre el visor web")
-    view.add_argument("path", type=Path, nargs="?", default=None, help="archivo .litematic")
-    view.add_argument("--host", default="127.0.0.1")
-    view.add_argument("--port", type=int, default=8000)
-    view.add_argument("--open", action="store_true", help="abre el navegador")
-    view.set_defaults(func=cmd_view)
+    gui = sub.add_parser("gui", help="abre la aplicación de escritorio")
+    gui.add_argument("path", type=Path, nargs="?", default=None, help="archivo .litematic")
+    gui.set_defaults(func=cmd_gui)
 
     return parser
 

@@ -11,10 +11,6 @@ build/
 .coverage
 htmlcov/
 
-# Node / visor web
-web/node_modules/
-web/dist/
-
 # Salidas generadas
 out/
 *.obj
