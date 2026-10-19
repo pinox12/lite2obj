@@ -55,6 +55,10 @@ Pipeline order, each layer assuming the previous:
   - A `cullface` face is emitted unless the neighbour is a full opaque cube. `covers` is
     computed per element; `_is_full_cube` accepts 90°-multiple rotations but rejects
     element `rotation`. Terrain blocks depend on this to cull at all.
+  - The `cullface` direction is rotated by the **variant** matrix (`rotate_direction`), exactly
+    like Minecraft (`Direction.rotate(modelState.transformation(), …)`). Don't skip it:
+    stairs/fences/trapdoors with `x`/`y` then cull against the wrong neighbour and show holes.
+    Element `rotation` does *not* rotate the cullface, in vanilla or here.
   - Normals come from **vertex winding** (`_winding_normal`), not by rotating the face
     table: some rotated/zero-thickness models make the rescale matrix singular.
   - Coincident faces **within one block** are merged by compositing sprites

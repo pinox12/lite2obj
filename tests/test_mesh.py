@@ -23,9 +23,17 @@ from lite2obj.mesh import (
     MeshBuilder,
     MeshOptions,
     _is_full_cube,
+    rotate_direction,
     rotate_uv,
 )
-from lite2obj.models import Element, ModelResolver, Variant, pick_variants, position_seed
+from lite2obj.models import (
+    Element,
+    ModelResolver,
+    Variant,
+    pick_variants,
+    position_seed,
+    variant_matrix,
+)
 
 EXPECTED_FACE_NORMALS = {
     "up": (0, 1, 0),
@@ -152,6 +160,25 @@ def test_rotate_uv():
     assert rotate_uv(0.0, 0.0, 180) == (1.0, 1.0)
     assert rotate_uv(0.0, 0.0, 270) == (1.0, 0.0)
     assert rotate_uv(0.25, 0.5, 360) == (0.25, 0.5)
+
+
+def test_rotate_direction_matches_minecraft_octahedral_table():
+    """El ``cullface`` gira como la geometría (tabla de ``OctahedralGroup`` de Minecraft).
+
+    Los valores están tomados del propio cliente (`Quadrant.fromXYZAngles`): si alguien cambia
+    el signo o el orden de las rotaciones, esto lo delata.
+    """
+    assert rotate_direction("north", variant_matrix(0, 90)) == "east"
+    assert rotate_direction("west", variant_matrix(0, 90)) == "north"
+    assert rotate_direction("north", variant_matrix(0, 180)) == "south"
+    assert rotate_direction("north", variant_matrix(0, 270)) == "west"
+    assert rotate_direction("down", variant_matrix(90, 0)) == "south"
+    assert rotate_direction("north", variant_matrix(90, 0)) == "down"
+    assert rotate_direction("north", variant_matrix(180, 90)) == "west"
+    assert rotate_direction("down", variant_matrix(180, 90)) == "up"
+    assert rotate_direction("north", variant_matrix(90, 90)) == "down"
+    assert rotate_direction("up", variant_matrix(90, 90)) == "east"
+    assert rotate_direction("east", variant_matrix(0, 0)) == "east"
 
 
 # --------------------------------------------------------------------------- #
@@ -418,6 +445,53 @@ def test_rotated_variants_still_cull_neighbours():
     region = _region([AIR, BlockState("test:rock")], [1, 1], (2, 1, 1))
     mesh = builder.build(_doc([region], (2, 1, 1)))
     assert mesh.quad_count == 10
+
+
+def test_rotated_variant_cullface_is_rotated():
+    """El ``cullface`` de un variant girado apunta al vecino ya girado, no al original.
+
+    Si no se gira, una cara que mira al este se descarta contra el bloque del norte (o al
+    revés): es lo que rompía las vallas y las escaleras giradas."""
+    builder = make_setup(
+        {
+            blockstate_path("test:panel"): {
+                "variants": {"": {"model": "test:block/cube_rot", "y": 90}}
+            },
+            model_path("test:block/cube_rot"): _model(),
+            texture_path("minecraft:block/tex"): make_png(),
+        }
+    )
+    state = builder.state_mesh(BlockState("test:panel"))
+    assert state.quad_count == 6
+    # La cara que queda mirando al este (x=1) llevaba "north" en el modelo: debe ser "east".
+    east = [t for t in state.templates if t.positions[:, 0].min() > 0.999]
+    assert len(east) == 1
+    assert east[0].cullface == "east"
+    # Invariante general: cada cullface apunta igual que su cara.
+    for template in state.templates:
+        assert template.cullface is not None
+        assert np.allclose(template.normal, EXPECTED_FACE_NORMALS[template.cullface])
+
+
+def test_rotated_cullface_culls_against_the_rotated_neighbour():
+    """Con un cubo opaco al este, la cara este del panel girado se descarta."""
+    builder = make_setup(
+        {
+            blockstate_path("test:panel"): {
+                "variants": {"": {"model": "test:block/cube_rot", "y": 90}}
+            },
+            blockstate_path("test:solid"): {"variants": {"": {"model": "test:block/solid"}}},
+            model_path("test:block/cube_rot"): _model(),
+            model_path("test:block/solid"): _model(),
+            texture_path("minecraft:block/tex"): make_png(),
+        }
+    )
+    # Panel en x=0, cubo opaco en x=1 (este): la cara este del panel se descarta.
+    region = _region([AIR, BlockState("test:panel"), BlockState("test:solid")], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+    # 6 + 6 caras menos la del panel (este) y la del cubo (oeste) que coinciden.
+    assert mesh.quad_count == 10
+    # Si el cullface no rotase, el panel miraría al norte (sin vecino) y quedarían 11.
 
 
 def test_covers_is_true_for_the_terrain_variants():

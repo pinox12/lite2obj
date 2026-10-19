@@ -48,6 +48,7 @@ __all__ = [
     "QuadTemplate",
     "StateMesh",
     "UV_CORNERS",
+    "rotate_direction",
     "rotate_uv",
 ]
 
@@ -93,6 +94,11 @@ FACE_NORMALS: dict[str, tuple[float, float, float]] = {
     "east": (1.0, 0.0, 0.0),
 }
 
+#: Vuelta a dirección desde el vector unitario (para girar los ``cullface``).
+_DIRECTION_BY_VECTOR: dict[tuple[int, int, int], str] = {
+    (int(normal[0]), int(normal[1]), int(normal[2])): name for name, normal in FACE_NORMALS.items()
+}
+
 #: Desplazamiento al bloque vecino en cada dirección.
 NEIGHBOURS: dict[str, tuple[int, int, int]] = {
     "up": (0, 1, 0),
@@ -131,6 +137,19 @@ def rotate_uv(s: float, t: float, rotation: int) -> tuple[float, float]:
     if rotation == 270:
         return 1.0 - t, s
     return s, t
+
+
+def rotate_direction(direction: str, matrix: np.ndarray) -> str:
+    """Gira la dirección de un ``cullface`` con la matriz del variant.
+
+    Minecraft rota el ``cullface`` junto con la geometría (``UnbakedCuboidGeometry``:
+    ``Direction.rotate(modelState.transformation(), cullForDirection)``). Si no se gira, una
+    escalera o una valla con ``y``/``x`` descarta caras contra el vecino equivocado: se ven
+    huecos donde no toca y las vallas y escaleras parecen mal orientadas.
+    """
+    vector = matrix @ np.array(FACE_NORMALS[direction], dtype=float)
+    key = (int(round(vector[0])), int(round(vector[1])), int(round(vector[2])))
+    return _DIRECTION_BY_VECTOR[key]
 
 
 # --------------------------------------------------------------------------- #
@@ -347,9 +366,10 @@ class MeshBuilder:
         for element, variant in geometry:
             model = self.resolver.model(variant.model)
             matrix = variant_matrix(variant.x, variant.y)
+            variant_rotation = bool(variant.x or variant.y)
             corners = element.corners()
             local = ((matrix @ (corners - BLOCK_CENTER).T).T + BLOCK_CENTER) / _MODEL_UNITS
-            rotated = element.rotation is not None or bool(variant.x or variant.y)
+            rotated = element.rotation is not None or variant_rotation
             element_opaque = True
             for direction, face in element.faces.items():
                 sprite = self.atlas.add(
@@ -367,6 +387,11 @@ class MeshBuilder:
                     normal = _winding_normal(positions)
                 else:
                     normal = np.array(FACE_NORMALS[direction], dtype=np.float32)
+                cullface = face.cullface
+                if cullface is not None and variant_rotation:
+                    # El ``cullface`` viaja con el giro del variant (como Minecraft): si no,
+                    # escaleras y vallas giradas descartan caras contra el vecino equivocado.
+                    cullface = rotate_direction(cullface, matrix)
                 if merge:
                     # Dos caras en el mismo plano (la hierba y su overlay) se hornean en una:
                     # así el visor y Blender enseñan lo mismo que Minecraft.
@@ -384,7 +409,7 @@ class MeshBuilder:
                         normal=normal,
                         st=st,
                         sprite=sprite,
-                        cullface=face.cullface,
+                        cullface=cullface,
                         alpha_mode=alpha_mode,
                         tintindex=face.tintindex,
                     )
