@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 205 tests |
+| F8 | Tests | ✅ 207 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -94,7 +94,8 @@ Notas de fidelidad:
   dibujadas en un mismo PNG— no estiren la textura entera en cada cara.
 - **Vidrieras y vallas**: los `.litematic` guardan las conexiones tal como estaban en el mundo,
   y a veces una vidriera colocada antes que su vecina se queda con `north/south/east/west` en
-  `false`. Se completan los enlaces que Minecraft recalcularía al colocar el bloque vecino.
+  `false`. Se normalizan como haría Minecraft: se añaden los enlaces entre vidrieras/barras y
+  entre vallas de la misma familia, y se quitan los que apuntan a aire o fuera de la región.
   Además se oculta la cara de unión entre vidrieras del mismo tipo, como hace
   `IronBarsBlock.skipRendering`: sin eso, cada bloque de un panel continuo dejaba una línea
   vertical con la textura `*_pane_top`.

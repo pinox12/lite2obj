@@ -617,11 +617,14 @@ def _same_fence(block: BlockState, neighbour: BlockState) -> bool:
     return (block.name in _WOODEN_FENCES) == (neighbour.name in _WOODEN_FENCES)
 
 
-def _with_props_true(block: BlockState, directions: list[str]) -> BlockState:
-    wanted = set(directions)
+def _with_props(block: BlockState, overrides: dict[str, bool]) -> BlockState:
+    """Copia el estado cambiando sólo las propiedades indicadas."""
     return BlockState(
         block.name,
-        tuple((key, "true" if key in wanted else value) for key, value in block.properties),
+        tuple(
+            (key, ("true" if overrides[key] else "false") if key in overrides else value)
+            for key, value in block.properties
+        ),
     )
 
 
@@ -641,27 +644,38 @@ def _connectable(block: BlockState, neighbour: BlockState) -> bool:
 def _recompute_connections(
     voxels: dict[tuple[int, int, int], BlockState],
 ) -> dict[tuple[int, int, int], BlockState]:
-    """Completa las conexiones que Minecraft recalcularía con una actualización de vecinos.
+    """Normaliza las conexiones como una actualización de vecinos de Minecraft.
 
     Los ``.litematic`` guardan el estado tal cual estaba en el mundo. A veces una vidriera o
     valla se colocó antes que su vecina y se quedó con la conexión a ``false``; Minecraft la
     corrige al recibir la actualización del bloque nuevo, pero el archivo conserva el valor
-    viejo. Sólo **añadimos** enlaces entre bloques conectables (nunca los quitamos) para no
-    romper los que apuntan a bloques fuera de la región capturada.
+    viejo. Hacemos lo mismo:
+
+    - entre bloques conectables (vidrieras/barras, vallas de la misma familia) se fuerza
+      ``true``;
+    - si no hay bloque (aire o fuera de la región) se fuerza ``false``, para no dibujar
+      raíles hacia la nada;
+    - contra cualquier otro bloque se respeta el valor guardado, porque el archivo sí suele
+      traer bien las conexiones con caras sólidas.
     """
     updated = dict(voxels)
     for position, block in voxels.items():
         if not (_is_bars(block) or _is_fence(block)):
             continue
-        missing: list[str] = []
+        overrides: dict[str, bool] = {}
         for direction, (dx, dy, dz) in _HORIZONTAL:
-            if _block_prop(block, direction):
-                continue
+            connected = _block_prop(block, direction)
             neighbour = voxels.get((position[0] + dx, position[1] + dy, position[2] + dz))
-            if neighbour is not None and _connectable(block, neighbour):
-                missing.append(direction)
-        if missing:
-            updated[position] = _with_props_true(block, missing)
+            if neighbour is None:
+                wanted = False
+            elif _connectable(block, neighbour):
+                wanted = True
+            else:
+                wanted = connected
+            if wanted != connected:
+                overrides[direction] = wanted
+        if overrides:
+            updated[position] = _with_props(block, overrides)
     return updated
 
 

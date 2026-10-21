@@ -642,6 +642,22 @@ def test_stale_pane_connection_is_filled_from_the_neighbour():
     assert not _block_prop(result[(0, 0, 0)], "north")
 
 
+def test_pane_connection_to_air_is_removed():
+    """Un raíl hacia la nada se quita: es lo que deja vidrieras sueltas en los bordes."""
+    lonely = _conn_state("test:glass_pane", west="true", south="true")
+    result = _recompute_connections({(0, 0, 0): lonely})
+    assert not _block_prop(result[(0, 0, 0)], "west")
+    assert not _block_prop(result[(0, 0, 0)], "south")
+
+
+def test_pane_connection_to_a_solid_block_is_preserved():
+    """Contra un bloque no conectable se respeta el valor que traía el archivo."""
+    pane = _conn_state("test:glass_pane", west="true")
+    solid = BlockState("test:cube")
+    result = _recompute_connections({(0, 0, 0): pane, (-1, 0, 0): solid})
+    assert _block_prop(result[(0, 0, 0)], "west")
+
+
 def test_stale_fence_connection_respects_the_material_family():
     oak = _conn_state("minecraft:oak_fence")
     spruce = _conn_state("minecraft:spruce_fence")
