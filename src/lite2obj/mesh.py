@@ -8,7 +8,8 @@ coordenadas UV de atlas. El proceso:
    UVs. El resultado se guarda en coordenadas locales 0..1, de modo que colocar un bloque es
    sólo sumar su posición. Como los estados se repiten muchísimo, esto se hace una sola vez.
 2. **Descarte de caras**: una cara con ``cullface`` se omite si el bloque vecino en esa
-   dirección es un cubo completo opaco, igual que hace Minecraft.
+   dirección es un cubo completo opaco (y, entre vidrieras conectadas, por
+   ``IronBarsBlock.skipRendering``), igual que hace Minecraft.
 3. **Emisión**: se recorre la rejilla de vóxeles y se vuelcan las caras visibles.
 
 Orden de caras y UV
@@ -108,6 +109,59 @@ NEIGHBOURS: dict[str, tuple[int, int, int]] = {
     "west": (-1, 0, 0),
     "east": (1, 0, 0),
 }
+
+#: Dirección contraria, para comprobar la conexión del vecino.
+_OPPOSITE: dict[str, str] = {
+    "up": "down",
+    "down": "up",
+    "north": "south",
+    "south": "north",
+    "west": "east",
+    "east": "west",
+}
+
+#: Etiqueta ``minecraft:bars`` del jar: barras que se ocultan entre sí (no las vidrieras).
+_BARS_TAG = frozenset(
+    {
+        "minecraft:iron_bars",
+        "minecraft:copper_bars",
+        "minecraft:exposed_copper_bars",
+        "minecraft:weathered_copper_bars",
+        "minecraft:oxidized_copper_bars",
+        "minecraft:waxed_copper_bars",
+        "minecraft:waxed_exposed_copper_bars",
+        "minecraft:waxed_weathered_copper_bars",
+        "minecraft:waxed_oxidized_copper_bars",
+    }
+)
+
+#: Etiqueta ``minecraft:wooden_fences``: las vallas de madera conectan entre sí, pero no
+#: con la de ladrillo del Nether (que forma su propia familia).
+_WOODEN_FENCES = frozenset(
+    {
+        "minecraft:oak_fence",
+        "minecraft:acacia_fence",
+        "minecraft:dark_oak_fence",
+        "minecraft:pale_oak_fence",
+        "minecraft:spruce_fence",
+        "minecraft:birch_fence",
+        "minecraft:jungle_fence",
+        "minecraft:crimson_fence",
+        "minecraft:warped_fence",
+        "minecraft:mangrove_fence",
+        "minecraft:bamboo_fence",
+        "minecraft:cherry_fence",
+        "minecraft:poplar_fence",
+    }
+)
+
+#: Direcciones horizontales con su desplazamiento al vecino.
+_HORIZONTAL: tuple[tuple[str, tuple[int, int, int]], ...] = (
+    ("north", (0, 0, -1)),
+    ("south", (0, 0, 1)),
+    ("east", (1, 0, 0)),
+    ("west", (-1, 0, 0)),
+)
 
 _MODEL_UNITS = 16.0
 
@@ -457,6 +511,8 @@ class MeshBuilder:
                         if not mask[index]:
                             voxels[(ox + x, oy + y, oz + z)] = palette[index]
 
+        voxels = _recompute_connections(voxels)
+
         placed: dict[tuple[int, int, int], StateMesh] = {}
         block_index: dict[str, int] = {}
         block_palette: list[BlockState] = []
@@ -491,7 +547,13 @@ class MeshBuilder:
             for quad_index, template in enumerate(state.templates):
                 if options.cull and template.cullface is not None:
                     offset = NEIGHBOURS[template.cullface]
-                    if covers.get((x + offset[0], y + offset[1], z + offset[2]), False):
+                    neighbour_pos = (x + offset[0], y + offset[1], z + offset[2])
+                    if covers.get(neighbour_pos, False):
+                        continue
+                    neighbour = voxels.get(neighbour_pos)
+                    if neighbour is not None and _skips_rendering(
+                        state.block, neighbour, template.cullface
+                    ):
                         continue
                 if limit and len(meta) >= limit:
                     partial = True
@@ -534,6 +596,91 @@ class MeshBuilder:
             origin=origin,
             partial=partial,
         )
+
+
+def _block_prop(block: BlockState, name: str) -> bool:
+    """Cierto si el estado tiene la propiedad booleana ``name`` a ``true``."""
+    return any(key == name and value == "true" for key, value in block.properties)
+
+
+def _is_bars(block: BlockState) -> bool:
+    """Cierto para los bloques de :class:`IronBarsBlock` (vidrieras y barras)."""
+    return block.path.endswith(("_pane", "_bars"))
+
+
+def _is_fence(block: BlockState) -> bool:
+    return block.path.endswith("_fence")
+
+
+def _same_fence(block: BlockState, neighbour: BlockState) -> bool:
+    """Cierto si ambas vallas son de la misma familia (madera o ladrillo del Nether)."""
+    return (block.name in _WOODEN_FENCES) == (neighbour.name in _WOODEN_FENCES)
+
+
+def _with_props_true(block: BlockState, directions: list[str]) -> BlockState:
+    wanted = set(directions)
+    return BlockState(
+        block.name,
+        tuple((key, "true" if key in wanted else value) for key, value in block.properties),
+    )
+
+
+def _connectable(block: BlockState, neighbour: BlockState) -> bool:
+    """Cierto si ``block`` debería connectarse con ``neighbour`` (misma familia).
+
+    Cubre los enlaces que nos interesan aquí: vidrieras/barras entre sí y vallas de la
+    misma familia. Las conexiones contra caras sólidas se dejan como vengan en el archivo.
+    """
+    if _is_bars(block):
+        return _is_bars(neighbour)
+    if _is_fence(block):
+        return _is_fence(neighbour) and _same_fence(block, neighbour)
+    return False
+
+
+def _recompute_connections(
+    voxels: dict[tuple[int, int, int], BlockState],
+) -> dict[tuple[int, int, int], BlockState]:
+    """Completa las conexiones que Minecraft recalcularía con una actualización de vecinos.
+
+    Los ``.litematic`` guardan el estado tal cual estaba en el mundo. A veces una vidriera o
+    valla se colocó antes que su vecina y se quedó con la conexión a ``false``; Minecraft la
+    corrige al recibir la actualización del bloque nuevo, pero el archivo conserva el valor
+    viejo. Sólo **añadimos** enlaces entre bloques conectables (nunca los quitamos) para no
+    romper los que apuntan a bloques fuera de la región capturada.
+    """
+    updated = dict(voxels)
+    for position, block in voxels.items():
+        if not (_is_bars(block) or _is_fence(block)):
+            continue
+        missing: list[str] = []
+        for direction, (dx, dy, dz) in _HORIZONTAL:
+            if _block_prop(block, direction):
+                continue
+            neighbour = voxels.get((position[0] + dx, position[1] + dy, position[2] + dz))
+            if neighbour is not None and _connectable(block, neighbour):
+                missing.append(direction)
+        if missing:
+            updated[position] = _with_props_true(block, missing)
+    return updated
+
+
+def _skips_rendering(block: BlockState, neighbour: BlockState, direction: str) -> bool:
+    """Reproduce ``IronBarsBlock.skipRendering`` para la cara de unión entre paneles.
+
+    Minecraft no dibuja el canto de una vidriera cuando el vecino es el mismo bloque (o
+    una barra de la etiqueta ``minecraft:bars``) y **ambos** estados están conectados en
+    ese eje. Sin esto, cada bloque de una vidriera continua deja una línea vertical con el
+    sprite ``*_pane_top`` y los paneles parecen piezas sueltas.
+    """
+    if direction not in ("north", "south", "east", "west") or not _is_bars(block):
+        return False
+    if not (
+        block.name == neighbour.name or (block.name in _BARS_TAG and neighbour.name in _BARS_TAG)
+    ):
+        return False
+    opposite = _OPPOSITE[direction]
+    return _block_prop(block, direction) and _block_prop(neighbour, opposite)
 
 
 def _is_full_cube(element: Element, variant: Variant) -> bool:

@@ -22,7 +22,9 @@ from lite2obj.mesh import (
     UV_CORNERS,
     MeshBuilder,
     MeshOptions,
+    _block_prop,
     _is_full_cube,
+    _recompute_connections,
     rotate_direction,
     rotate_uv,
 )
@@ -80,6 +82,40 @@ def cube_setup(texture: str = "minecraft:block/tex", *, cullface: bool = True) -
             texture_path(texture): make_png(),
         }
     )
+
+
+def _pane_model(direction: str) -> dict:
+    """Media vidriera con el canto en ``direction`` y dos caras laterales."""
+    if direction == "north":
+        frm, to = [7, 0, 0], [9, 16, 7]
+    else:
+        frm, to = [7, 0, 9], [9, 16, 16]
+    faces = {
+        "west": {"texture": "#all"},
+        "east": {"texture": "#all"},
+        direction: {"texture": "#all", "cullface": direction},
+    }
+    return {
+        "textures": {"all": "minecraft:block/tex"},
+        "elements": [{"from": frm, "to": to, "faces": faces}],
+    }
+
+
+def pane_setup(*names: str) -> MeshBuilder:
+    """Dos medias vidrieras (norte/sur) para probar el descarte de la junta."""
+    entries: dict[str, object] = {
+        model_path("test:block/pane_north"): _pane_model("north"),
+        model_path("test:block/pane_south"): _pane_model("south"),
+        texture_path("minecraft:block/tex"): make_png(),
+    }
+    for name in names:
+        entries[blockstate_path(name)] = {
+            "multipart": [
+                {"when": {"north": "true"}, "apply": {"model": "test:block/pane_north"}},
+                {"when": {"south": "true"}, "apply": {"model": "test:block/pane_south"}},
+            ]
+        }
+    return make_setup(entries)
 
 
 # --------------------------------------------------------------------------- #
@@ -427,6 +463,41 @@ def test_real_fixture_mesh():
     assert_normals_match_winding(mesh, "fixture")
 
 
+def test_real_panes_complete_stale_connections_and_cull_the_joint():
+    """Con los modelos reales: la conexión desfasada se completa y la junta se oculta."""
+    from _jar import jar_resources
+
+    south = BlockState(
+        "minecraft:glass_pane",
+        (
+            ("east", "false"),
+            ("north", "false"),
+            ("south", "true"),
+            ("waterlogged", "false"),
+            ("west", "false"),
+        ),
+    )
+    north = BlockState(
+        "minecraft:glass_pane",
+        (
+            ("east", "false"),
+            ("north", "false"),
+            ("south", "false"),
+            ("waterlogged", "false"),
+            ("west", "false"),
+        ),
+    )
+    region = _region([AIR, south, north], [1, 2], (1, 1, 2))
+    doc = _doc([region], (1, 1, 2))
+    resolver = ModelResolver(jar_resources())
+
+    culled = MeshBuilder(resolver).build(doc)
+    assert culled.quad_count == 18
+    # Sin culling quedan los dos cantos de la junta (20), pero la conexión ya está completa.
+    unculled = MeshBuilder(resolver, options=MeshOptions(cull=False)).build(doc)
+    assert unculled.quad_count == 20
+
+
 # --------------------------------------------------------------------------- #
 # Oclusión, variants rotados y elección por posición
 # --------------------------------------------------------------------------- #
@@ -527,6 +598,59 @@ def test_rotated_cullface_culls_against_the_rotated_neighbour():
     # 6 + 6 caras menos la del panel (este) y la del cubo (oeste) que coinciden.
     assert mesh.quad_count == 10
     # Si el cullface no rotase, el panel miraría al norte (sin vecino) y quedarían 11.
+
+
+def test_connected_panes_cull_the_joint_faces():
+    """Dos vidrieras del mismo bloque y conectadas no dibujan el canto de la junta.
+
+    Es el ``IronBarsBlock.skipRendering`` de Minecraft: sin esto, una vidriera continua
+    enseña una línea vertical con ``*_pane_top`` en cada bloque.
+    """
+    builder = pane_setup("test:glass_pane")
+    north = BlockState("test:glass_pane", (("north", "true"),))
+    south = BlockState("test:glass_pane", (("south", "true"),))
+    region = _region([AIR, south, north], [1, 2], (1, 1, 2))
+    mesh = builder.build(_doc([region], (1, 1, 2)))
+    # 3 caras por media vidriera menos los dos cantos de la junta.
+    assert mesh.quad_count == 4
+
+
+def test_different_panes_keep_the_joint_faces():
+    """Dos vidrieras de bloques distintos no se ocultan (como en Minecraft)."""
+    builder = pane_setup("test:glass_pane", "test:other_pane")
+    north = BlockState("test:other_pane", (("north", "true"),))
+    south = BlockState("test:glass_pane", (("south", "true"),))
+    region = _region([AIR, south, north], [1, 2], (1, 1, 2))
+    mesh = builder.build(_doc([region], (1, 1, 2)))
+    assert mesh.quad_count == 6
+
+
+def _conn_state(name: str, **props: str) -> BlockState:
+    base = {"north": "false", "east": "false", "south": "false", "west": "false"}
+    base.update(props)
+    return BlockState(name, tuple(sorted(base.items())))
+
+
+def test_stale_pane_connection_is_filled_from_the_neighbour():
+    """Una vidriera colocada antes que su vecina se reconecta (no al revés)."""
+    south = _conn_state("test:glass_pane", south="true")
+    north = _conn_state("test:glass_pane")
+    result = _recompute_connections({(0, 0, 0): south, (0, 0, 1): north})
+    assert _block_prop(result[(0, 0, 1)], "north")
+    assert not _block_prop(result[(0, 0, 1)], "south")
+    # El aire no inventa conexiones.
+    assert not _block_prop(result[(0, 0, 0)], "north")
+
+
+def test_stale_fence_connection_respects_the_material_family():
+    oak = _conn_state("minecraft:oak_fence")
+    spruce = _conn_state("minecraft:spruce_fence")
+    nether = _conn_state("minecraft:nether_brick_fence")
+    result = _recompute_connections({(0, 0, 0): oak, (0, 0, 1): spruce})
+    assert _block_prop(result[(0, 0, 1)], "north")
+    # La valla de ladrillo del Nether no se une a las de madera.
+    result = _recompute_connections({(0, 0, 0): oak, (0, 0, 1): nether})
+    assert not _block_prop(result[(0, 0, 1)], "north")
 
 
 def test_covers_is_true_for_the_terrain_variants():

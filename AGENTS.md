@@ -59,6 +59,16 @@ Pipeline order, each layer assuming the previous:
     like Minecraft (`Direction.rotate(modelState.transformation(), …)`). Don't skip it:
     stairs/fences/trapdoors with `x`/`y` then cull against the wrong neighbour and show holes.
     Element `rotation` does *not* rotate the cullface, in vanilla or here.
+  - Panes and bars have an extra joint rule (`IronBarsBlock.skipRendering`): the end face is
+    culled when the neighbour is the **same block** (or another block in `minecraft:bars`) and
+    both connection properties point at each other. Without it, every block of a continuous
+    pane draws its `*_pane_top` edge strip and the glass looks segmented. The rails' up/down
+    faces have no `cullface`, so they keep being emitted (vanilla does the same).
+  - A `.litematic` stores connection properties as they were in the world, so a pane/fence
+    placed before its neighbour can keep `north/south/east/west=false`. `_recompute_connections`
+    completes those links like a vanilla neighbour update: panes/bars connect to each other,
+    fences only within the same family (wooden vs nether brick). Only links are **added**, never
+    removed, so connections to blocks outside the captured region survive.
   - Face UVs come from `ElementFace.uv_or_default`: the model's explicit `uv` rectangle, or
     `default_uv` derived from the element box when absent. Never map 0..1 across the whole
     sprite: textures with several pieces (flower pots, lanterns, fences, plants) then stretch
