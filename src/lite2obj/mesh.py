@@ -22,6 +22,7 @@ jar en ``tests/test_mesh.py``.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -52,6 +53,8 @@ __all__ = [
     "UV_CORNERS",
     "rotate_direction",
     "rotate_uv",
+    "rotate_uv_about",
+    "uvlock_rotation",
 ]
 
 
@@ -192,6 +195,85 @@ def rotate_uv(s: float, t: float, rotation: int) -> tuple[float, float]:
     if rotation == 270:
         return 1.0 - t, s
     return s, t
+
+
+#: Ciclos de dirección que usa Minecraft al aplicar ``uvlock`` con ``x`` e ``y``.
+_UVLOCK_X_CYCLE: dict[str, str] = {
+    "north": "up",
+    "up": "south",
+    "south": "down",
+    "down": "north",
+}
+_UVLOCK_Y_CYCLE: dict[str, str] = {
+    "north": "east",
+    "east": "south",
+    "south": "west",
+    "west": "north",
+}
+
+#: Centro (en píxeles) alrededor del que Minecraft gira las UV con ``uvlock``.
+_UV_CENTER = 8.0
+
+
+def uvlock_rotation(direction: str, x: int, y: int) -> float:
+    """Ángulo que hay que girar las UV absolutas (0..16) para ``uvlock``.
+
+    Minecraft no limita ``uvlock`` a las UV de la cara: gira los cuatro vértices de textura
+    alrededor del píxel ``(8, 8)`` de la textura. Como las UV de una cara pueden ocupar sólo
+    media textura (escaleras, losas, postes...), el giro también cambia la región muestreada;
+    es justo lo que hace que una escalera boca abajo enseñe la mitad superior y no la inferior
+    invertida. La secuencia de direcciones y los ángulos son los de ``uvlock`` de Minecraft.
+    """
+    angle = 0.0
+    xn = x % 360
+    effective = direction
+    if xn:
+        if direction == "east":
+            angle += xn
+        elif direction == "west":
+            angle -= xn
+        elif direction == "north":
+            angle += 180
+        elif direction == "south":
+            angle += 180 if xn == 180 else 0
+        elif direction == "up":
+            angle += 180 if xn == 90 else 0
+        elif direction == "down":
+            angle += 180 if xn == 270 else 0
+        for _ in range(xn // 90):
+            effective = _UVLOCK_X_CYCLE.get(effective, effective)
+    if y:
+        for _ in range((y % 360) // 90):
+            effective = _UVLOCK_Y_CYCLE.get(effective, effective)
+        if effective in ("up", "down"):
+            # ``up`` gira en un sentido y ``down`` en el contrario; un ``x`` de 90/270
+            # intercambia ambos papeles.
+            angle += y if (effective == "up") ^ (xn % 180 != 0) else -y
+    return angle % 360
+
+
+def rotate_uv_about(u: float, v: float, angle: float) -> tuple[float, float]:
+    """Gira una UV absoluta alrededor del centro ``(8, 8)`` de la textura.
+
+    Se usan casos exactos para los múltiplos de 90 (los únicos válidos en el formato de
+    modelos), de modo que las UV no arrastran errores de coma flotante.
+    """
+    angle %= 360
+    if not angle:
+        return u, v
+    du, dv = u - _UV_CENTER, v - _UV_CENTER
+    if angle == 90:
+        return _UV_CENTER - dv, _UV_CENTER + du
+    if angle == 180:
+        return _UV_CENTER - du, _UV_CENTER - dv
+    if angle == 270:
+        return _UV_CENTER + dv, _UV_CENTER - du
+    radians = math.radians(angle)
+    cos, sin = math.cos(radians), math.sin(radians)
+    return (
+        _UV_CENTER + du * cos - dv * sin,
+        _UV_CENTER + du * sin + dv * cos,
+    )
 
 
 def rotate_direction(direction: str, matrix: np.ndarray) -> str:
@@ -445,12 +527,16 @@ class MeshBuilder:
                 # la textura entera: en modelos con varias piezas en un mismo PNG (maceta,
                 # farol, vallas, plantas...) cada cara enseñaba el dibujo completo.
                 u0, v0, u1, v1 = face.uv_or_default(element.frm, element.to, direction)
+                lock_angle = (
+                    uvlock_rotation(direction, variant.x, variant.y) if variant.uvlock else 0.0
+                )
                 for slot, corner in enumerate(FACE_UV_ORDER[direction]):
                     s, t = rotate_uv(*UV_CORNERS[corner], face.rotation)
-                    st[slot] = (
-                        (u0 + s * (u1 - u0)) / _MODEL_UNITS,
-                        (v0 + t * (v1 - v0)) / _MODEL_UNITS,
-                    )
+                    u = u0 + s * (u1 - u0)
+                    v = v0 + t * (v1 - v0)
+                    if lock_angle:
+                        u, v = rotate_uv_about(u, v, lock_angle)
+                    st[slot] = (u / _MODEL_UNITS, v / _MODEL_UNITS)
                 positions = local[list(FACE_CORNERS[direction])].astype(np.float32)
                 if rotated:
                     normal = _winding_normal(positions)

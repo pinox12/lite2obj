@@ -27,6 +27,8 @@ from lite2obj.mesh import (
     _recompute_connections,
     rotate_direction,
     rotate_uv,
+    rotate_uv_about,
+    uvlock_rotation,
 )
 from lite2obj.models import (
     Element,
@@ -196,6 +198,96 @@ def test_rotate_uv():
     assert rotate_uv(0.0, 0.0, 180) == (1.0, 1.0)
     assert rotate_uv(0.0, 0.0, 270) == (1.0, 0.0)
     assert rotate_uv(0.25, 0.5, 360) == (0.25, 0.5)
+
+
+def test_rotate_uv_about_texture_center():
+    # Minecraft gira las UV absolutas alrededor del píxel (8,8), no del centro de la cara.
+    assert rotate_uv_about(0.0, 8.0, 180) == (16.0, 8.0)
+    assert rotate_uv_about(16.0, 8.0, 180) == (0.0, 8.0)
+    assert rotate_uv_about(0.0, 16.0, 180) == (16.0, 0.0)
+    assert rotate_uv_about(16.0, 16.0, 180) == (0.0, 0.0)
+    assert rotate_uv_about(4.0, 8.0, 90) == (8.0, 4.0)
+    assert rotate_uv_about(4.0, 8.0, 360) == (4.0, 8.0)
+
+
+@pytest.mark.parametrize(
+    ("direction", "x", "y", "expected"),
+    [
+        # ``x: 180`` es el caso de las escaleras boca abajo: gira las cuatro caras
+        # laterales, pero no las de arriba/abajo.
+        ("north", 180, 0, 180.0),
+        ("south", 180, 0, 180.0),
+        ("east", 180, 0, 180.0),
+        ("west", 180, 0, 180.0),
+        ("up", 180, 0, 0.0),
+        ("down", 180, 0, 0.0),
+        # Un ``y`` sólo desbloquea las caras horizontales; arriba y abajo giran en sentidos
+        # opuestos.
+        ("north", 0, 90, 0.0),
+        ("up", 0, 90, 90.0),
+        ("down", 0, 90, 270.0),
+        # Al combinar x/y, el ``y`` actúa sobre la dirección efectiva tras el giro x.
+        ("up", 180, 90, 270.0),
+        ("down", 180, 90, 90.0),
+    ],
+)
+def test_uvlock_rotation(direction, x, y, expected):
+    assert uvlock_rotation(direction, x, y) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    ("uvlock", "v_min", "v_max"),
+    [
+        # Sin uvlock la textura gira con el modelo: la mitad inferior acaba invertida.
+        (False, 0.5, 1.0),
+        # Con uvlock se muestrea la mitad superior y queda derecha, como en Minecraft.
+        (True, 0.0, 0.5),
+    ],
+)
+def test_uvlock_keeps_side_texture_upright(uvlock, v_min, v_max):
+    """La cara lateral de una "escalera" boca abajo no debe invertir la textura."""
+    builder = make_setup(
+        {
+            blockstate_path("test:stairish"): {
+                "variants": {
+                    "": {"model": "test:block/stairish", "x": 180, "uvlock": uvlock},
+                }
+            },
+            model_path("test:block/stairish"): {
+                "textures": {"all": "minecraft:block/tex"},
+                "elements": [
+                    {
+                        "from": [0, 0, 0],
+                        "to": [16, 16, 16],
+                        "faces": {
+                            "north": {"texture": "#all", "uv": [0, 8, 16, 16]},
+                            "south": {"texture": "#all", "uv": [0, 0, 16, 16]},
+                            "east": {"texture": "#all", "uv": [0, 0, 16, 16]},
+                            "west": {"texture": "#all", "uv": [0, 0, 16, 16]},
+                            "up": {"texture": "#all", "uv": [0, 0, 16, 16]},
+                            "down": {"texture": "#all", "uv": [0, 0, 16, 16]},
+                        },
+                    }
+                ],
+            },
+            texture_path("minecraft:block/tex"): make_png(),
+        }
+    )
+    state = builder.state_mesh(BlockState("test:stairish"))
+    # La cara norte original termina siendo la cara sur (z=1) y es la única sur del cubo.
+    south = next(
+        t
+        for t in state.templates
+        if np.allclose(t.normal, FACE_NORMALS["south"]) and np.allclose(t.positions[:, 2], 1.0)
+    )
+    assert south.st[:, 1].min() == pytest.approx(v_min)
+    assert south.st[:, 1].max() == pytest.approx(v_max)
+    top = south.positions[:, 1] > 0.5
+    bottom = ~top
+    if uvlock:
+        assert south.st[top, 1].max() < south.st[bottom, 1].min()
+    else:
+        assert south.st[top, 1].min() > south.st[bottom, 1].max()
 
 
 def test_rotate_direction_matches_minecraft_octahedral_table():
@@ -794,6 +886,54 @@ def assert_normals_match_winding(mesh, label: str = "") -> None:
         assert np.allclose(expected, mesh.normals[index * 4], atol=1e-4), (
             f"{label}: cara {index} apunta a {mesh.normals[index * 4]}, el giro dice {expected}"
         )
+
+
+def test_real_top_stairs_keep_side_texture_upright():
+    """Con el modelo real: la contrahuella superior no invierte la textura.
+
+    Las escaleras usan ``x: 180, uvlock: true`` para la mitad superior. Sin ``uvlock`` la UV
+    de la contrahuella viajaba con el giro y quedaba boca abajo; con él, Minecraft muestrea la
+    mitad correspondiente de la textura y la deja derecha.
+    """
+    from _jar import jar_resources
+
+    builder = MeshBuilder(ModelResolver(jar_resources()))
+
+    def stairs(half: str):
+        return builder.state_mesh(
+            BlockState(
+                "minecraft:oak_stairs",
+                (
+                    ("facing", "east"),
+                    ("half", half),
+                    ("shape", "straight"),
+                    ("waterlogged", "false"),
+                ),
+            )
+        )
+
+    def north_riser(state, y_min: float, y_max: float):
+        return next(
+            template
+            for template in state.templates
+            if np.allclose(template.normal, FACE_NORMALS["north"])
+            and np.allclose(template.positions[:, 2], 0.0)
+            and np.allclose(template.positions[:, 1].min(), y_min)
+            and np.allclose(template.positions[:, 1].max(), y_max)
+        )
+
+    bottom = north_riser(stairs("bottom"), 0.0, 0.5)
+    top = north_riser(stairs("top"), 0.5, 1.0)
+
+    assert bottom.st[:, 1].min() == pytest.approx(0.5)
+    assert bottom.st[:, 1].max() == pytest.approx(1.0)
+    assert top.st[:, 1].min() == pytest.approx(0.0)
+    assert top.st[:, 1].max() == pytest.approx(0.5)
+
+    for riser in (bottom, top):
+        upper = riser.positions[:, 1] > riser.positions[:, 1].mean()
+        lower = ~upper
+        assert riser.st[upper, 1].max() < riser.st[lower, 1].min()
 
 
 def test_normals_follow_the_variant_rotation():

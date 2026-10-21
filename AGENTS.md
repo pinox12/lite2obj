@@ -94,8 +94,11 @@ Pipeline order, each layer assuming the previous:
   outside.
 - Export: `up_axis="z"` maps `(x,y,z) -> (x,z,-y)`; positions/UVs/normals are rounded to
   6 decimals **before** dedupe. OBJ uses separate v/vt/vn indices.
-- Known fidelity concession: `uvlock` is not implemented (inner/outer stair corners use
-  model UVs). Don't silently "fix" it; document any change in README.
+- `uvlock` is implemented like vanilla: rotate the **absolute** model UVs (0..16) around
+  texture pixel `(8,8)` with the x/y angle and direction-cycle rules, then divide to sprite
+  coordinates. Face `rotation` is applied first (both are rotations around UV space, but their
+  centers differ). Without it, `half=top` stairs (`x:180`) show the lower-half texture upside
+  down. Keep this behavior if you touch UV baking and update README if it changes.
 
 ## GUI (`gui/`)
 

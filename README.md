@@ -106,8 +106,11 @@ Notas de fidelidad:
   las superficies inclinadas suavizadas de Minecraft no se reproducen. El fluido de los bloques
   *waterlogged* (losas, escaleras…) todavía no se dibuja: se conserva sólo la geometría del
   bloque.
-- **`uvlock`**: las esquinas de escalera (`inner_*`/`outer_*`) usan las UV del modelo en vez de
-  bloquear el giro; es la única concesión conocida del conversor.
+- **`uvlock`**: implementado como Minecraft. Antes de aplicar el giro del variant se giran las
+  UV absolutas alrededor del centro de la textura (píxel `8,8`), así que la textura no gira con
+  el bloque. Es lo que mantiene derecha la contrahuella de las escaleras boca abajo
+  (`half=top`, `x: 180`) y la orientación de las esquinas `inner_*`/`outer_*`; sin ello esa
+  cara mostraba la mitad inferior de la textura invertida.
 
 ### Aplicación de escritorio
 
