@@ -85,6 +85,20 @@ def test_orbit_pan_zoom_change_camera():
     assert camera.distance < distance
 
 
+def test_orbit_inverts_vertical_drag_only():
+    # Vertical invertido: arrastrar hacia abajo (dy>0) sube la cámara (pitch aumenta).
+    camera = OrbitCamera()
+    pitch = camera.pitch
+    camera.orbit(0, 30)
+    assert camera.pitch > pitch
+    # Horizontal sin tocar: a la derecha sigue girando igual (yaw disminuye).
+    camera = OrbitCamera()
+    yaw = camera.yaw
+    camera.orbit(30, 0)
+    assert camera.yaw < yaw
+    assert camera.pitch == math.radians(28.0)
+
+
 def test_qmatrix_conversion_is_column_major():
     matrix = perspective(60.0, 1.5, 0.1, 100.0)
     converted = np.array(_matrix_qmatrix(matrix).data(), dtype=np.float64).reshape(4, 4)

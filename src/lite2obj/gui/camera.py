@@ -93,8 +93,10 @@ class OrbitCamera:
         return right, _normalize(up)
 
     def orbit(self, dx: float, dy: float) -> None:
+        # Horizontal: arrastrar a la derecha gira la cámara a la derecha (sin cambios).
+        # Vertical: invertido a propósito; arrastrar hacia abajo sube la cámara.
         self.yaw -= dx * 0.008
-        self.pitch = float(np.clip(self.pitch - dy * 0.008, -_MAX_PITCH, _MAX_PITCH))
+        self.pitch = float(np.clip(self.pitch + dy * 0.008, -_MAX_PITCH, _MAX_PITCH))
 
     def pan(self, dx: float, dy: float, viewport_height: int) -> None:
         """Desplaza el objetivo para que el modelo siga al cursor."""
