@@ -194,7 +194,8 @@ Notas:
 
 ### F1 · Parseo (base solida)
 - `nbt.py`: todos los tags, autodeteccion de compresion.
-- `litematic.py`: multi-region con `Position`/`Size` (incl. tamanos negativos = espejado),
+- `litematic.py`: multi-region con `Position`/`Size` (tamaños negativos: el origen pasa a la
+  esquina mínima, sin espejar el grid),
   despaquetado YZX, propiedades de bloque, `TileEntities`, `Metadata`.
 - **DoD**: sobre `almacen bonito 1x4x4.litematic` reporta exactamente 42 bloques; corre
   sobre los 27 schematics sin excepciones.

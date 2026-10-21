@@ -133,9 +133,10 @@ class Region:
     """Una región del esquemático.
 
     ``grid`` es un array ``(size_y, size_z, size_x)`` de índices a ``palette``
-    ya normalizado: las dimensiones negativas de Litematica se reflejan para que
-    los índices del array crezcan siempre en la misma dirección que las
-    coordenadas globales.
+    indexado siempre desde la **esquina mínima** de la región. El ``Size`` firmado
+    de Litematica solo describe la caja de selección (el contenedor se guarda de
+    mínimo a máximo), así que un tamaño negativo no espeja el array: los estados
+    de los bloques deben conservarse tal cual vienen del mundo.
     """
 
     name: str
@@ -267,17 +268,11 @@ def _build_region(name: str, data: dict[str, Any]) -> Region:
     longs = np.asarray(data.get("BlockStates", np.zeros(0, dtype=np.int64)), dtype=np.int64)
     raw = unpack_bits(longs, bits, count) if bits else np.zeros(count, dtype=np.int32)
 
-    grid = raw.reshape(sy, sz, sx)
-
-    # Refleja las dimensiones negativas para que el índice del array crezca en la
-    # misma dirección que las coordenadas globales.
-    if directions[0] < 0:
-        grid = grid[:, :, ::-1]
-    if directions[1] < 0:
-        grid = grid[::-1, :, :]
-    if directions[2] < 0:
-        grid = grid[:, ::-1, :]
-    grid = np.ascontiguousarray(grid, dtype=np.int32)
+    # Litematica guarda el contenedor siempre de la esquina mínima a la máxima
+    # (``readSubRegionsFromData`` normaliza el área antes de crear el contenedor).
+    # El signo de ``Size`` no espeja el array: no hay que invertir el grid, solo
+    # desplazar el origen a la esquina mínima.
+    grid = np.ascontiguousarray(raw.reshape(sy, sz, sx), dtype=np.int32)
 
     # Esquina mínima de la región en coordenadas globales.
     origin = tuple(position[i] - (abs_size[i] - 1 if directions[i] < 0 else 0) for i in range(3))

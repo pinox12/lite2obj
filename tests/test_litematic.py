@@ -80,14 +80,23 @@ def test_unpack_bits_edge_cases():
 # --------------------------------------------------------------------------- #
 
 
-def _palette(*names: str):
-    return (
-        nbt.TAG_LIST,
-        (
-            nbt.TAG_COMPOUND,
-            [{"Name": (nbt.TAG_STRING, name)} for name in names],
-        ),
-    )
+def _palette(*names: str | tuple[str, dict[str, str]]):
+    entries: list[dict] = []
+    for name in names:
+        if isinstance(name, tuple):
+            block, properties = name
+            entries.append(
+                {
+                    "Name": (nbt.TAG_STRING, block),
+                    "Properties": (
+                        nbt.TAG_COMPOUND,
+                        {k: (nbt.TAG_STRING, v) for k, v in properties.items()},
+                    ),
+                }
+            )
+        else:
+            entries.append({"Name": (nbt.TAG_STRING, name)})
+    return (nbt.TAG_LIST, (nbt.TAG_COMPOUND, entries))
 
 
 def make_region(
@@ -182,8 +191,10 @@ def test_positive_size_region_roundtrip():
     assert region.volume == 4
 
 
-def test_negative_size_is_mirrored_into_global_coordinates():
-    # size.x = -2 con posición x=5 -> el índice 0 está en x=5 y el 1 en x=4.
+def test_negative_size_uses_min_corner_without_mirroring_the_grid():
+    # size.x = -2 con posición x=5: la caja va de x=4 (mínimo) a x=5 (máximo).
+    # Litematica guarda el contenedor del mínimo al máximo, así que el índice 0
+    # cae en x=4 y conserva su estado; el tamaño negativo no invierte el array.
     doc = litematic.loads(
         make_litematic(
             [
@@ -200,13 +211,41 @@ def test_negative_size_is_mirrored_into_global_coordinates():
     region = doc.regions[0]
     assert region.size == (2, 1, 1)
     assert region.origin == (4, 0, 0)
-    # Tras normalizar, el índice 0 corresponde a x=4 (iron).
-    assert region.block_at(0, 0, 0).path == "iron_block"
-    assert region.block_at(1, 0, 0).path == "gold_block"
+    assert region.block_at(0, 0, 0).path == "gold_block"
+    assert region.block_at(1, 0, 0).path == "iron_block"
     assert sorted(doc.iter_blocks()) == [
-        (4, 0, 0, litematic.BlockState("minecraft:iron_block")),
-        (5, 0, 0, litematic.BlockState("minecraft:gold_block")),
+        (4, 0, 0, litematic.BlockState("minecraft:gold_block")),
+        (5, 0, 0, litematic.BlockState("minecraft:iron_block")),
     ]
+
+
+def test_negative_size_does_not_rotate_directional_blocks():
+    # Regresión: una selección con Size negativo en X y Z no debe espejar el
+    # layout dejando las escaleras mirando al lado contrario. Los estados son
+    # absolutos del mundo y se conservan índices y facing.
+    stairs = (
+        "minecraft:oak_stairs",
+        {"facing": "north", "half": "bottom", "waterlogged": "false"},
+    )
+    doc = litematic.loads(
+        make_litematic(
+            [
+                make_region(
+                    "r",
+                    position=(1, 0, 1),
+                    size=(-2, 1, -2),
+                    palette=["minecraft:air", stairs],
+                    grid_yzx=[1, 0, 0, 1],  # (x0,z0) y (x1,z1) con escalera
+                )
+            ]
+        )
+    )
+    region = doc.regions[0]
+    assert region.origin == (0, 0, 0)
+    assert region.size == (2, 1, 2)
+    assert region.grid.tolist() == [[[1, 0], [0, 1]]]
+    assert region.block_at(0, 0, 0).properties_dict()["facing"] == "north"
+    assert region.block_at(1, 0, 1).properties_dict()["facing"] == "north"
 
 
 def test_multi_region_offsets_and_enclosing_size():

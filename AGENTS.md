@@ -84,7 +84,9 @@ Pipeline order, each layer assuming the previous:
   (opaque/cutout/translucent). The viewer buffer is pre-sorted into three material groups
   by these modes.
 - Geometry conventions: YZX bit packing (`idx = y*(sizeX*sizeZ) + z*sizeX + x`), palette
-  index 0 is air, negative region `Size` mirrors, quads are CCW seen from outside.
+  index 0 is air, a negative region `Size` only moves `origin` to the min corner (the
+  container is always min-corner ordered; never mirror the grid), quads are CCW seen from
+  outside.
 - Export: `up_axis="z"` maps `(x,y,z) -> (x,z,-y)`; positions/UVs/normals are rounded to
   6 decimals **before** dedupe. OBJ uses separate v/vt/vn indices.
 - Known fidelity concession: `uvlock` is not implemented (inner/outer stair corners use
