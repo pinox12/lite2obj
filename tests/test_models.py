@@ -21,6 +21,7 @@ from lite2obj.assets import (
     parse_resource_id,
     texture_path,
 )
+from lite2obj.fallbacks import FallbackResolver, fluid_cube, fluid_height
 from lite2obj.litematic import BlockState
 from lite2obj.models import (
     BLOCK_CENTER,
@@ -369,6 +370,27 @@ def test_water_fallback_uses_fluid_texture():
     assert len(geometry) == 1
     element, _ = geometry[0]
     assert element.faces["up"].texture == "minecraft:block/water_still"
+
+
+def test_fluid_cube_height_tint_and_cullface():
+    """El fluido no llena el bloque, se tiñe y participa en el descarte de caras."""
+    source = fluid_cube("water")
+    assert source.to[1] == pytest.approx(16.0 * 8.0 / 9.0)
+    assert source.faces["up"].tintindex == 0
+    assert source.faces["up"].cullface == "up"
+    assert source.faces["down"].cullface == "down"
+
+    stacked = fluid_cube("water", fluid_above=True)
+    assert stacked.to[1] == 16.0
+
+    assert fluid_height(3) == pytest.approx(16.0 * 5.0 / 9.0)
+    assert fluid_height(0, fluid_above=True) == 16.0
+
+    # La lava ya viene coloreada: no se tiñe.
+    assert fluid_cube("lava").faces["up"].tintindex is None
+
+    # Los esquemáticos antiguos pueden traer el identificador ``flowing_water``.
+    assert FallbackResolver().is_fluid("flowing_water") == "water"
 
 
 def test_alias_chain_becomes_iron_chain():

@@ -346,6 +346,110 @@ def test_culling_can_be_disabled():
     assert mesh.quad_count == 12
 
 
+# --------------------------------------------------------------------------- #
+# Fluidos
+# --------------------------------------------------------------------------- #
+
+
+WATER = BlockState("minecraft:water", (("level", "0"),))
+
+
+def fluid_setup() -> MeshBuilder:
+    """Agua con una textura gris translúcida, como ``water_still`` en vanilla."""
+    return make_setup(
+        {
+            blockstate_path("minecraft:water"): {
+                "variants": {"": {"model": "minecraft:block/water"}}
+            },
+            model_path("minecraft:block/water"): {},
+            texture_path("minecraft:block/water_still"): make_png(color=(174, 174, 174, 180)),
+            blockstate_path("test:solid"): {"variants": {"": {"model": "test:block/solid"}}},
+            model_path("test:block/solid"): _model("minecraft:block/solid"),
+            texture_path("minecraft:block/solid"): make_png(),
+        }
+    )
+
+
+def test_water_is_tinted_translucent_and_sits_at_8_over_9():
+    builder = fluid_setup()
+    region = _region([AIR, WATER], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 6
+    assert set(mesh.alpha_mode.tolist()) == {2}
+    assert mesh.positions[:, 1].max() == pytest.approx(8.0 / 9.0)
+
+    key = ("minecraft:block/water_still", "#3f76e4")
+    sprite = builder.atlas._sprites[key]
+    assert sprite is not None
+    pixel = builder.atlas.image.crop(sprite.box).getpixel((0, 0))
+    assert pixel[:3] == (174 * 0x3F // 255, 174 * 0x76 // 255, 174 * 0xE4 // 255)
+    assert pixel[3] == 180
+
+
+def test_water_culls_faces_between_water_blocks():
+    """Sin la regla de fluido contra fluido el agua translúcida es una rejilla de paredes."""
+    builder = fluid_setup()
+    region = _region([AIR, WATER], [1] * 9, (3, 1, 3))
+    mesh = builder.build(_doc([region], (3, 1, 3)))
+
+    # 9 caras superiores + 9 inferiores + 12 laterales; las 24 internas se descartan.
+    assert mesh.quad_count == 30
+    normals = mesh.normals[mesh.quads[:, 0]]
+    assert int(np.isclose(normals[:, 1], 1.0).sum()) == 9
+    assert int(np.isclose(normals[:, 1], -1.0).sum()) == 9
+
+
+def test_stacked_water_fills_the_block_under_the_surface():
+    builder = fluid_setup()
+    region = _region([AIR, WATER], [1, 1], (1, 2, 1))
+    mesh = builder.build(_doc([region], (1, 2, 1)))
+
+    # 12 caras menos las dos horizontales internas.
+    assert mesh.quad_count == 10
+    assert mesh.positions[:, 1].min() == pytest.approx(0.0)
+    assert mesh.positions[:, 1].max() == pytest.approx(1.0 + 8.0 / 9.0)
+    normals = mesh.normals[mesh.quads[:, 0]]
+    # Sólo hay una cara superior (la de la superficie) y una inferior (la base).
+    assert int(np.isclose(normals[:, 1], 1.0).sum()) == 1
+    assert int(np.isclose(normals[:, 1], -1.0).sum()) == 1
+
+
+def test_water_against_opaque_neighbour_culls_only_that_face():
+    builder = fluid_setup()
+    solid = BlockState("test:solid")
+    region = _region([AIR, WATER, solid], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+
+    water_index = next(i for i, block in enumerate(mesh.palette) if block.name == WATER.name)
+    assert int((mesh.block == water_index).sum()) == 5
+
+
+def test_water_keeps_its_side_above_lower_flowing_water():
+    builder = fluid_setup()
+    flowing = BlockState("minecraft:water", (("level", "7"),))
+    region = _region([AIR, WATER, flowing], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+
+    # La fuente conserva su cara este (sobresale por encima del agua baja); la cara oeste
+    # del nivel 7 queda tapada por la fuente.
+    assert mesh.quad_count == 11
+
+
+def test_water_surface_is_lower_than_the_adjacent_block():
+    """El agua no llega al techo del bloque: en la orilla se ve el escalón de 1/9."""
+    builder = fluid_setup()
+    solid = BlockState("test:solid")
+    region = _region([AIR, WATER, solid], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+
+    assert mesh.positions[:, 1].max() == pytest.approx(1.0)
+    water_index = next(i for i, block in enumerate(mesh.palette) if block.name == WATER.name)
+    water_quads = np.where(mesh.block == water_index)[0]
+    water_vertices = mesh.positions[np.unique(mesh.quads[water_quads])]
+    assert water_vertices[:, 1].max() == pytest.approx(8.0 / 9.0)
+
+
 def test_slab_does_not_cull_the_cube_behind_it():
     # Una losa no es un cubo completo: no debe ocultar la cara del vecino.
     builder = make_setup(

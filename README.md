@@ -99,6 +99,13 @@ Notas de fidelidad:
   Además se oculta la cara de unión entre vidrieras del mismo tipo, como hace
   `IronBarsBlock.skipRendering`: sin eso, cada bloque de un panel continuo dejaba una línea
   vertical con la textura `*_pane_top`.
+- **Fluidos**: el agua se tiñe con el color por defecto (bioma *plains*), su superficie queda a
+  `8/9` del bloque (o a `1` cuando hay más fluido encima) y las caras entre bloques del mismo
+  fluido se descartan. Sin ese descarte, el agua translúcida dibujaba todas sus paredes
+  internas y se veía como una rejilla casi opaca. Los niveles de flujo bajan `1/9` por nivel;
+  las superficies inclinadas suavizadas de Minecraft no se reproducen. El fluido de los bloques
+  *waterlogged* (losas, escaleras…) todavía no se dibuja: se conserva sólo la geometría del
+  bloque.
 - **`uvlock`**: las esquinas de escalera (`inner_*`/`outer_*`) usan las UV del modelo en vez de
   bloquear el giro; es la única concesión conocida del conversor.
 

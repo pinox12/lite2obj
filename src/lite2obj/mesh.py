@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .fallbacks import fluid_height
 from .litematic import BlockState, Litematic
 from .models import (
     BLOCK_CENTER,
@@ -387,7 +388,7 @@ class MeshBuilder:
             enabled=self.options.tint,
             tints=self.options.tint_colors or dict(DEFAULT_TINTS),
         )
-        self._states: dict[tuple[str, tuple[tuple[str, int, int, bool], ...]], StateMesh] = {}
+        self._states: dict[tuple[str, tuple[tuple[str, int, int, bool], ...], bool], StateMesh] = {}
 
     # -- plantillas -------------------------------------------------------- #
 
@@ -395,23 +396,29 @@ class MeshBuilder:
         return f"{block.name}[{block.variant_key()}]"
 
     def state_mesh(
-        self, block: BlockState, position: tuple[int, int, int] | None = None
+        self,
+        block: BlockState,
+        position: tuple[int, int, int] | None = None,
+        *,
+        fluid_above: bool = False,
     ) -> StateMesh:
         """Geometría local del estado, con caché por estado y variant elegido.
 
         Los bloques de terreno traen varias rotaciones y Minecraft escoge una por posición,
-        así que la plantilla se cachea por ``(estado, variants escogidos)``.
+        así que la plantilla se cachea por ``(estado, variants escogidos)``. ``fluid_above``
+        forma parte de la clave: un fluido con otro encima ocupa el bloque entero y uno en
+        la superficie queda a ``8/9``.
         """
         resolved = self.resolver.resolve(block)
         seed = position_seed(position) if position is not None else resolved.seed
         variants = pick_variants(resolved.groups, seed)
         signature = tuple((v.model, v.x, v.y, v.uvlock) for v in variants)
-        key = (self.state_key(block), signature)
+        key = (self.state_key(block), signature, fluid_above)
         cached = self._states.get(key)
         if cached is not None:
             return cached
 
-        geometry = self.resolver.elements_for(resolved, variants)
+        geometry = self.resolver.elements_for(resolved, variants, fluid_above=fluid_above)
         templates: list[QuadTemplate] = []
         # Con un solo elemento no puede haber caras coincidentes: se salta el agrupado.
         merge = len(geometry) > 1
@@ -489,6 +496,56 @@ class MeshBuilder:
         self._states[key] = state
         return state
 
+    # -- fluidos ----------------------------------------------------------- #
+
+    def _fluid(self, block: BlockState | None) -> str | None:
+        """Nombre del fluido del bloque (``water``/``lava``) o ``None``."""
+        if block is None:
+            return None
+        return self.resolver.fallbacks.is_fluid(block.path)
+
+    def _fluid_above(
+        self,
+        voxels: dict[tuple[int, int, int], BlockState],
+        position: tuple[int, int, int],
+        fluid: str,
+    ) -> bool:
+        """Cierto si el bloque de encima contiene el mismo fluido."""
+        above = voxels.get((position[0], position[1] + 1, position[2]))
+        return self._fluid(above) == fluid
+
+    def _fluid_culls(
+        self,
+        block: BlockState,
+        neighbour: BlockState,
+        direction: str,
+        voxels: dict[tuple[int, int, int], BlockState],
+        position: tuple[int, int, int],
+        neighbour_pos: tuple[int, int, int],
+    ) -> bool:
+        """Descarta una cara de fluido contra otro bloque del mismo fluido.
+
+        El descarte normal sólo mira bloques opacos, y el agua es translúcida: sin esta
+        regla cada bloque dibuja sus seis caras y el interior de una masa de agua se ve
+        como una rejilla de paredes superpuestas. En los laterales sólo se descarta si el
+        vecino llega a nuestra altura (si es agua de un nivel inferior, la cara de arriba
+        sigue siendo visible).
+        """
+        fluid = self._fluid(block)
+        if fluid is None or self._fluid(neighbour) != fluid:
+            return False
+        if direction in ("up", "down"):
+            return True
+        my_height = fluid_height(
+            _fluid_level(block),
+            fluid_above=self._fluid_above(voxels, position, fluid),
+        )
+        their_height = fluid_height(
+            _fluid_level(neighbour),
+            fluid_above=self._fluid_above(voxels, neighbour_pos, fluid),
+        )
+        return their_height >= my_height - 1e-6
+
     # -- construcción ------------------------------------------------------ #
 
     def build(self, doc: Litematic) -> Mesh:
@@ -521,7 +578,9 @@ class MeshBuilder:
             if key not in block_index:
                 block_index[key] = len(block_palette)
                 block_palette.append(block)
-            placed[position] = self.state_mesh(block, position)
+            fluid = self._fluid(block)
+            fluid_above = fluid is not None and self._fluid_above(voxels, position, fluid)
+            placed[position] = self.state_mesh(block, position, fluid_above=fluid_above)
 
         self.atlas.build()
         finalized: set[int] = set()
@@ -553,6 +612,15 @@ class MeshBuilder:
                     neighbour = voxels.get(neighbour_pos)
                     if neighbour is not None and _skips_rendering(
                         state.block, neighbour, template.cullface
+                    ):
+                        continue
+                    if neighbour is not None and self._fluid_culls(
+                        state.block,
+                        neighbour,
+                        template.cullface,
+                        voxels,
+                        position,
+                        neighbour_pos,
                     ):
                         continue
                 if limit and len(meta) >= limit:
@@ -601,6 +669,14 @@ class MeshBuilder:
 def _block_prop(block: BlockState, name: str) -> bool:
     """Cierto si el estado tiene la propiedad booleana ``name`` a ``true``."""
     return any(key == name and value == "true" for key, value in block.properties)
+
+
+def _fluid_level(block: BlockState) -> int:
+    """Nivel de fluido del estado (0 = fuente); 0 si no lo declara."""
+    try:
+        return int(block.properties_dict().get("level", "0"))
+    except ValueError:
+        return 0
 
 
 def _is_bars(block: BlockState) -> bool:

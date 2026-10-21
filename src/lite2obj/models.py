@@ -692,6 +692,7 @@ class ModelResolver:
         position: tuple[int, int, int] | None = None,
         *,
         allow_fallback: bool = True,
+        fluid_above: bool = False,
     ) -> list[tuple[Element, Variant]]:
         """Elementos a dibujar con su variant (para aplicar rotaciones después).
 
@@ -704,7 +705,12 @@ class ModelResolver:
         except BlockModelError:
             # Bloques sin blockstate (los fluidos son el caso típico).
             fallback = (
-                self.fallbacks.elements_for(block.path, block.properties_dict(), None)
+                self.fallbacks.elements_for(
+                    block.path,
+                    block.properties_dict(),
+                    None,
+                    fluid_above=fluid_above,
+                )
                 if allow_fallback
                 else ()
             )
@@ -714,7 +720,9 @@ class ModelResolver:
 
         seed = position_seed(position) if position is not None else state.seed
         variants = pick_variants(state.groups, seed)
-        return self.elements_for(state, variants, allow_fallback=allow_fallback)
+        return self.elements_for(
+            state, variants, allow_fallback=allow_fallback, fluid_above=fluid_above
+        )
 
     def elements_for(
         self,
@@ -722,6 +730,7 @@ class ModelResolver:
         variants: Sequence[Variant],
         *,
         allow_fallback: bool = True,
+        fluid_above: bool = False,
     ) -> list[tuple[Element, Variant]]:
         """Elementos de un estado ya resuelto, con los variants concretos ya elegidos."""
         result: list[tuple[Element, Variant]] = []
@@ -737,7 +746,10 @@ class ModelResolver:
             if particle:
                 break
         fallback = self.fallbacks.elements_for(
-            state.block.path, state.block.properties_dict(), particle
+            state.block.path,
+            state.block.properties_dict(),
+            particle,
+            fluid_above=fluid_above,
         )
         if not fallback:
             return []
