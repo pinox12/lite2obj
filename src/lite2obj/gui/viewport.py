@@ -47,6 +47,9 @@ _GL_DEPTH_TEST = 0x0B71
 _GL_BLEND = 0x0BE2
 _GL_SRC_ALPHA = 0x0302
 _GL_ONE_MINUS_SRC_ALPHA = 0x0303
+_GL_CULL_FACE = 0x0B44
+_GL_BACK = 0x0405
+_GL_CCW = 0x0901
 
 _VERTEX = """
 #version 330 core
@@ -383,6 +386,12 @@ class Viewport(QOpenGLWidget):
 
     def _draw_mesh(self, matrix: QMatrix4x4) -> None:
         assert self._gl is not None and self._main is not None and self._mesh_gl is not None
+        # Minecraft sólo rasteriza la cara delantera. Sin esto, al mirar a través de un
+        # cristal se ven también las caras traseras de los bloques y parece que hay texturas
+        # de más. Las caras se emiten CCW vistas desde fuera.
+        self._gl.glEnable(_GL_CULL_FACE)
+        self._gl.glCullFace(_GL_BACK)
+        self._gl.glFrontFace(_GL_CCW)
         self._main.bind()
         self._main.setUniformValue(self._mu["view_proj"], matrix)
         self._main.setUniformValue1f(self._mu["y_min"], float(self.layer_min))
@@ -406,6 +415,7 @@ class Viewport(QOpenGLWidget):
         self._mesh_gl.vao.release()
         self._gl.glDepthMask(True)
         self._gl.glDisable(_GL_BLEND)
+        self._gl.glDisable(_GL_CULL_FACE)
 
     def closeEvent(self, event) -> None:
         self.shutdown()

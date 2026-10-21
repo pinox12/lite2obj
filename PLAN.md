@@ -51,8 +51,9 @@ Desviaciones respecto al plan:
 - **Render 3D**: en vez del visor web Three.js, la app usa **OpenGL nativo de Qt** dentro de un
   `QOpenGLWidget` (PySide6). Un contexto GL externo (p. ej. moderngl/glcontext) puede crear su
   propio framebuffer y el dibujo nunca se presenta; por eso se usan las clases `QOpenGL*`.
-- **`uvlock`**: los modelos con `uvlock` (esquinas de escaleras `inner_*`/`outer_*`) usan las
-  UVs del modelo en lugar de bloquear el giro; es la única concesión conocida.
+- **`uvlock`**: implementado como Minecraft: las UV absolutas se giran alrededor del píxel
+  `(8,8)` antes de aplicar el giro del variant. Corrige las escaleras boca abajo (`x: 180`) y
+  las esquinas `inner_*`/`outer_*`.
 - **Variants por posición**: los bloques de terreno (`stone`, `dirt`, `grass_block`…) traen
   varias rotaciones y Minecraft elige una **por posición**; se replica con un *hash* estable de
   la posición (`models.position_seed`), así que el suelo no se ve repetitivo. El *hash* no es

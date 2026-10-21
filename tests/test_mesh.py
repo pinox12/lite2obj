@@ -438,6 +438,39 @@ def test_culling_can_be_disabled():
     assert mesh.quad_count == 12
 
 
+def glass_setup(*names: str) -> MeshBuilder:
+    """Cristales con un modelo de cubo propio, sin depender del jar."""
+    entries: dict[str, object] = {
+        model_path("test:block/glass"): _model("minecraft:block/tex"),
+        # Translúcida: así el estado no es un oclusor opaco y se prueba el culling de cristal.
+        texture_path("minecraft:block/tex"): make_png(color=(255, 255, 255, 100)),
+    }
+    for name in names:
+        entries[blockstate_path(name)] = {
+            "variants": {"": {"model": "test:block/glass"}},
+        }
+    return make_setup(entries)
+
+
+def test_glass_culls_the_shared_face_between_equal_blocks():
+    """Como ``AbstractGlassBlock.skipRendering``: el cristal no es opaco, pero no se duplica."""
+    builder = glass_setup("minecraft:glass")
+    region = _region([AIR, BlockState("minecraft:glass")], [1, 1], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+    # 6 + 6 - 2 caras internas = 10.
+    assert mesh.quad_count == 10
+
+
+def test_glass_of_different_colours_keeps_the_shared_face():
+    """Dos cristales tintados distintos no son el mismo bloque: Minecraft dibuja la unión."""
+    red = BlockState("minecraft:red_stained_glass")
+    blue = BlockState("minecraft:blue_stained_glass")
+    builder = glass_setup(red.name, blue.name)
+    region = _region([AIR, red, blue], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+    assert mesh.quad_count == 12
+
+
 # --------------------------------------------------------------------------- #
 # Fluidos
 # --------------------------------------------------------------------------- #

@@ -55,6 +55,9 @@ Pipeline order, each layer assuming the previous:
   - A `cullface` face is emitted unless the neighbour is a full opaque cube. `covers` is
     computed per element; `_is_full_cube` accepts 90°-multiple rotations but rejects
     element `rotation`. Terrain blocks depend on this to cull at all.
+  - Equal glass blocks also cull their shared face (`AbstractGlassBlock.skipRendering`), even
+    though glass is not opaque. Different stained-glass colours keep it. Without this, a glass
+    wall shows an internal grid that vanilla hides.
   - The `cullface` direction is rotated by the **variant** matrix (`rotate_direction`), exactly
     like Minecraft (`Direction.rotate(modelState.transformation(), …)`). Don't skip it:
     stairs/fences/trapdoors with `x`/`y` then cull against the wrong neighbour and show holes.
@@ -111,6 +114,9 @@ Pipeline order, each layer assuming the previous:
 - `viewport.triangle_soup()` builds a triangle soup already ordered by alpha mode; each group
   draws with `glDrawArrays`. Prefer `glDrawArrays` over
   `glDrawElements(..., offset)`: PySide6's indexed-offset path produced black frames.
+- The mesh is drawn with `GL_CULL_FACE`/`GL_BACK` because quads are CCW outward and Minecraft
+  culls backfaces. Without it, transparent blocks show their back faces through the front.
+  Don't apply it to the line/grid passes.
 - Release GL resources only with the context current: `Viewport.shutdown()` is called from
   `MainWindow.closeEvent` and from `QOpenGLContext.aboutToBeDestroyed`. Destroying a
   `QOpenGLTexture` without a current context warns and leaks.

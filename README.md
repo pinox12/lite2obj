@@ -78,6 +78,21 @@ Al importar en Blender (`File > Import > Wavefront (.obj)`) deja los tres archiv
 carpeta y mantén `Split by Object` desactivado para obtener una sola malla. Si desactivas la
 conversión de ejes del importador usa `--z-up`.
 
+Blender dibuja por defecto las dos caras de cada polígono, mientras que Minecraft sólo dibuja
+la cara delantera. En bloques transparentes eso se nota: a través del cristal se ven las caras
+traseras. El OBJ/MTL no puede guardar esa opción; actívala en el material importado
+(**Material Properties → Settings → Backface Culling**) o, desde la consola de Python de
+Blender:
+
+```python
+bpy.data.materials["atlas"].use_backface_culling = True
+```
+
+Para verla también en el modo *Solid*, activa **Backface Culling** en el desplegable de
+sombreado del visor. En *Cycles* esa casilla no filtra los rayos: hay que mezclar un nodo
+*Geometry → Backfacing* con un *Transparent BSDF*. El visor de lite2obj ya lo aplica siempre,
+como Minecraft.
+
 Notas de fidelidad:
 
 - **Variantes de terreno**: `stone`, `dirt` o `grass_block` traen varias rotaciones y Minecraft
@@ -92,6 +107,10 @@ Notas de fidelidad:
 - **UV del modelo**: se respeta el `uv` explícito de cada cara (y el derivado de la caja si
   falta), como Minecraft. Es lo que hace que macetas, faroles, vallas y plantas —varias piezas
   dibujadas en un mismo PNG— no estiren la textura entera en cada cara.
+- **Cristal**: dos bloques del mismo cristal no dibujan la cara común
+  (`AbstractGlassBlock.skipRendering`), aunque el cristal no sea un cubo opaco. Así una pared
+  de cristal no enseña la retícula de caras internas que Minecraft oculta; dos cristales
+  tintados de distinto color sí conservan la unión.
 - **Vidrieras y vallas**: los `.litematic` guardan las conexiones tal como estaban en el mundo,
   y a veces una vidriera colocada antes que su vecina se queda con `north/south/east/west` en
   `false`. Se normalizan como haría Minecraft: se añaden los enlaces entre vidrieras/barras y
@@ -126,8 +145,9 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
   soltar sobre la ventana.
 - **Resource packs**: lista con casillas; arriba tiene más prioridad y los assets que falten
   caen al vanilla.
-- **Vista y render**: descartar caras ocultas, tintes de bioma, resolución del atlas
-  (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y corte por capas Y.
+- **Vista y render**: descartar caras ocultas, *backface culling* como Minecraft, tintes de
+  bioma, resolución del atlas (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y
+  corte por capas Y.
 - **Exportar a Blender**: carpeta, nombre, agrupación, escala y `Z arriba` (nativo de Blender).
 
 La vista 3D se renderiza con el OpenGL nativo de Qt (PySide6), no con el navegador: órbita con

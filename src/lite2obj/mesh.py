@@ -139,6 +139,31 @@ _BARS_TAG = frozenset(
     }
 )
 
+#: Bloques de ``AbstractGlassBlock``: dos cristales iguales no dibujan su cara común
+#: (``skipRendering``), aunque no sean cubos opacos. Dos cristales de distinto color sí.
+_GLASS_BLOCKS = frozenset(
+    {
+        "minecraft:glass",
+        "minecraft:tinted_glass",
+        "minecraft:white_stained_glass",
+        "minecraft:orange_stained_glass",
+        "minecraft:magenta_stained_glass",
+        "minecraft:light_blue_stained_glass",
+        "minecraft:yellow_stained_glass",
+        "minecraft:lime_stained_glass",
+        "minecraft:pink_stained_glass",
+        "minecraft:gray_stained_glass",
+        "minecraft:light_gray_stained_glass",
+        "minecraft:cyan_stained_glass",
+        "minecraft:purple_stained_glass",
+        "minecraft:blue_stained_glass",
+        "minecraft:brown_stained_glass",
+        "minecraft:green_stained_glass",
+        "minecraft:red_stained_glass",
+        "minecraft:black_stained_glass",
+    }
+)
+
 #: Etiqueta ``minecraft:wooden_fences``: las vallas de madera conectan entre sí, pero no
 #: con la de ladrillo del Nether (que forma su propia familia).
 _WOODEN_FENCES = frozenset(
@@ -770,6 +795,11 @@ def _is_bars(block: BlockState) -> bool:
     return block.path.endswith(("_pane", "_bars"))
 
 
+def _is_glass(block: BlockState) -> bool:
+    """Cierto para los bloques de :class:`AbstractGlassBlock` (cristal y tintados)."""
+    return block.name in _GLASS_BLOCKS
+
+
 def _is_fence(block: BlockState) -> bool:
     return block.path.endswith("_fence")
 
@@ -842,13 +872,18 @@ def _recompute_connections(
 
 
 def _skips_rendering(block: BlockState, neighbour: BlockState, direction: str) -> bool:
-    """Reproduce ``IronBarsBlock.skipRendering`` para la cara de unión entre paneles.
+    """Reproduce ``Block.skipRendering`` para las caras que Minecraft no dibuja.
 
-    Minecraft no dibuja el canto de una vidriera cuando el vecino es el mismo bloque (o
-    una barra de la etiqueta ``minecraft:bars``) y **ambos** estados están conectados en
-    ese eje. Sin esto, cada bloque de una vidriera continua deja una línea vertical con el
-    sprite ``*_pane_top`` y los paneles parecen piezas sueltas.
+    - **Cristales**: dos bloques del mismo cristal no dibujan su cara común
+      (``AbstractGlassBlock``), aunque el cristal no sea opaco. Sin esto, una pared de
+      cristal enseña una retícula de caras internas que Minecraft oculta.
+    - **Vidrieras y barras** (``IronBarsBlock``): se oculta el canto cuando el vecino es el
+      mismo bloque (o una barra de la etiqueta ``minecraft:bars``) y **ambos** estados están
+      conectados en ese eje. Sin esto, cada bloque de una vidriera continua deja una línea
+      vertical con el sprite ``*_pane_top`` y los paneles parecen piezas sueltas.
     """
+    if _is_glass(block):
+        return block.name == neighbour.name
     if direction not in ("north", "south", "east", "west") or not _is_bars(block):
         return False
     if not (
