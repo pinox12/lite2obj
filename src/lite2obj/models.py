@@ -420,7 +420,7 @@ class ElementFace:
     tintindex: int | None = None
 
     def uv_or_default(
-        self, frm: np.ndarray, to: np.ndarray, direction: str
+        self, frm: Sequence[float], to: Sequence[float], direction: str
     ) -> tuple[float, float, float, float]:
         """UV explícita o derivada de la caja del elemento."""
         if self.uv is not None:
@@ -429,7 +429,7 @@ class ElementFace:
 
 
 def default_uv(
-    frm: np.ndarray, to: np.ndarray, direction: str
+    frm: Sequence[float], to: Sequence[float], direction: str
 ) -> tuple[float, float, float, float]:
     """UV por defecto de una cara según el estándar de modelos de Minecraft."""
     x0, y0, z0 = (float(v) for v in frm)

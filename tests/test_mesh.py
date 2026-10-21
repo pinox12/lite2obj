@@ -206,6 +206,41 @@ def test_state_mesh_uvs_are_inside_the_sprite():
     assert np.ptp(state.uvs[:, :, 0]) <= 0.5
 
 
+def test_explicit_model_uv_is_used():
+    """El ``uv`` del modelo se respeta (sin él, macetas y faroles estiran el PNG entero).
+
+    ``uv`` ausente se deriva de la caja (``default_uv``), como en Minecraft.
+    """
+    builder = make_setup(
+        {
+            blockstate_path("test:panel"): {"variants": {"": {"model": "test:block/panel"}}},
+            model_path("test:block/panel"): {
+                "textures": {"all": "minecraft:block/tex"},
+                "elements": [
+                    {
+                        "from": [0, 0, 0],
+                        "to": [16, 16, 16],
+                        "faces": {
+                            "north": {"texture": "#all", "uv": [4, 4, 12, 12]},
+                            "south": {"texture": "#all"},
+                        },
+                    }
+                ],
+            },
+            texture_path("minecraft:block/tex"): make_png(),
+        }
+    )
+    state = builder.state_mesh(BlockState("test:panel"))
+    north = next(t for t in state.templates if np.allclose(t.normal, FACE_NORMALS["north"]))
+    # UV explícita [4,4,12,12] sobre 16 -> 0.25..0.75 dentro del sprite.
+    assert north.st.min() == pytest.approx(0.25)
+    assert north.st.max() == pytest.approx(0.75)
+    # Sin ``uv``, el cubo completo usa 0..1.
+    south = next(t for t in state.templates if np.allclose(t.normal, FACE_NORMALS["south"]))
+    assert south.st.min() == pytest.approx(0.0)
+    assert south.st.max() == pytest.approx(1.0)
+
+
 def test_translucent_block_does_not_cover_neighbours():
     builder = make_setup(
         {

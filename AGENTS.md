@@ -59,6 +59,10 @@ Pipeline order, each layer assuming the previous:
     like Minecraft (`Direction.rotate(modelState.transformation(), …)`). Don't skip it:
     stairs/fences/trapdoors with `x`/`y` then cull against the wrong neighbour and show holes.
     Element `rotation` does *not* rotate the cullface, in vanilla or here.
+  - Face UVs come from `ElementFace.uv_or_default`: the model's explicit `uv` rectangle, or
+    `default_uv` derived from the element box when absent. Never map 0..1 across the whole
+    sprite: textures with several pieces (flower pots, lanterns, fences, plants) then stretch
+    the entire PNG onto every face.
   - Normals come from **vertex winding** (`_winding_normal`), not by rotating the face
     table: some rotated/zero-thickness models make the rescale matrix singular.
   - Coincident faces **within one block** are merged by compositing sprites

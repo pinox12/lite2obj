@@ -202,7 +202,7 @@ def test_real_fixture_golden_counts(tmp_path):
     assert mesh.atlas.size == (128, 64)
 
     positions, uvs, normals, faces, _, _ = obj_geometry(mesh, ExportOptions())
-    assert (len(positions), len(uvs), len(normals), len(faces)) == (238, 32, 6, 274)
+    assert (len(positions), len(uvs), len(normals), len(faces)) == (238, 73, 6, 274)
 
     result = export_obj(mesh, tmp_path, ExportOptions(name="store"))
     assert result.vertices == 238

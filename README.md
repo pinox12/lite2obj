@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 195 tests |
+| F8 | Tests | ✅ 199 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -89,6 +89,9 @@ Notas de fidelidad:
 - **Caras repetidas entre bloques**: losas, escaleras, cristales y alfombras comparten caras
   con sus vecinos porque éstos no son cubos opacos; Minecraft también las dibuja dos veces.
   Blender puede descartarlas al importar (misma textura, sin diferencia visible).
+- **UV del modelo**: se respeta el `uv` explícito de cada cara (y el derivado de la caja si
+  falta), como Minecraft. Es lo que hace que macetas, faroles, vallas y plantas —varias piezas
+  dibujadas en un mismo PNG— no estiren la textura entera en cada cara.
 - **`uvlock`**: las esquinas de escalera (`inner_*`/`outer_*`) usan las UV del modelo en vez de
   bloquear el giro; es la única concesión conocida del conversor.
 

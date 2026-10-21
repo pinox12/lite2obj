@@ -380,8 +380,16 @@ class MeshBuilder:
                 if alpha_mode != 0:
                     element_opaque = False
                 st = np.zeros((4, 2), dtype=np.float32)
+                # UV explícita del modelo (o derivada de la caja). Sin esto cada cara estira
+                # la textura entera: en modelos con varias piezas en un mismo PNG (maceta,
+                # farol, vallas, plantas...) cada cara enseñaba el dibujo completo.
+                u0, v0, u1, v1 = face.uv_or_default(element.frm, element.to, direction)
                 for slot, corner in enumerate(FACE_UV_ORDER[direction]):
-                    st[slot] = rotate_uv(*UV_CORNERS[corner], face.rotation)
+                    s, t = rotate_uv(*UV_CORNERS[corner], face.rotation)
+                    st[slot] = (
+                        (u0 + s * (u1 - u0)) / _MODEL_UNITS,
+                        (v0 + t * (v1 - v0)) / _MODEL_UNITS,
+                    )
                 positions = local[list(FACE_CORNERS[direction])].astype(np.float32)
                 if rotated:
                     normal = _winding_normal(positions)
