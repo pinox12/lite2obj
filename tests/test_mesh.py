@@ -618,6 +618,20 @@ def fluid_setup() -> MeshBuilder:
             blockstate_path("test:solid"): {"variants": {"": {"model": "test:block/solid"}}},
             model_path("test:block/solid"): _model("minecraft:block/solid"),
             texture_path("minecraft:block/solid"): make_png(),
+            blockstate_path("test:slab"): {"variants": {"": {"model": "test:block/slab"}}},
+            model_path("test:block/slab"): {
+                "textures": {"all": "minecraft:block/slab"},
+                "elements": [
+                    {
+                        "from": [0, 0, 0],
+                        "to": [16, 8, 16],
+                        "faces": {
+                            d: {"texture": "#all", "cullface": d} for d in EXPECTED_FACE_NORMALS
+                        },
+                    }
+                ],
+            },
+            texture_path("minecraft:block/slab"): make_png(color=(190, 190, 190, 255)),
         }
     )
 
@@ -631,7 +645,8 @@ def test_water_is_tinted_translucent_and_smooths_its_surface():
     assert set(mesh.alpha_mode.tolist()) == {2}
     # Una fuente rodeada de aire no llega a 8/9: ``calculateAverageHeight`` también
     # promedia las esquinas secas (peso 1) con la altura propia (peso 10).
-    assert mesh.positions[:, 1].max() == pytest.approx(8.0 / 9.0 * 10.0 / 12.0)
+    # ``FluidRenderer`` baja la superficie 0.001 para no coincidir con el bloque vecino.
+    assert mesh.positions[:, 1].max() == pytest.approx(8.0 / 9.0 * 10.0 / 12.0 - 0.001)
 
     key = ("minecraft:block/water_still", "#3f76e4")
     sprite = builder.atlas._sprites[key]
@@ -662,10 +677,11 @@ def test_stacked_water_fills_the_block_under_the_surface():
 
     # 12 caras menos las dos horizontales internas.
     assert mesh.quad_count == 10
-    assert mesh.positions[:, 1].min() == pytest.approx(0.0)
+    # El fondo también se desplaza 0.001 hacia arriba, como ``bottomOffs`` de vanilla.
+    assert mesh.positions[:, 1].min() == pytest.approx(0.001)
     # El bloque inferior llega a 1 porque tiene agua encima; la superficie superior se
     # suaviza contra el aire que la rodea.
-    assert mesh.positions[:, 1].max() == pytest.approx(1.0 + 8.0 / 9.0 * 10.0 / 12.0)
+    assert mesh.positions[:, 1].max() == pytest.approx(1.0 + 8.0 / 9.0 * 10.0 / 12.0 - 0.001)
     normals = mesh.normals[mesh.quads[:, 0]]
     # Sólo hay una cara superior (la de la superficie) y una inferior (la base).
     assert int(np.isclose(normals[:, 1], 1.0).sum()) == 1
@@ -745,6 +761,53 @@ def test_water_surface_is_lower_than_the_adjacent_block():
     water_vertices = mesh.positions[np.unique(mesh.quads[water_quads])]
     assert water_vertices[:, 1].max() < 8.0 / 9.0
     assert water_vertices[:, 1].max() > 0.7
+
+
+def test_waterlogged_slab_keeps_its_geometry_and_adds_fluid():
+    """Una losa *waterlogged* dibuja la losa y el agua que contiene."""
+    builder = fluid_setup()
+    slab = BlockState("test:slab", (("waterlogged", "true"),))
+    region = _region([AIR, slab], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    # 6 caras de losa (opacas) + 6 de agua (translúcidas), sin descartes contra el aire.
+    assert mesh.quad_count == 12
+    assert int((mesh.alpha_mode == 0).sum()) == 6
+    water = np.where(mesh.alpha_mode == 2)[0]
+    assert len(water) == 6
+
+    water_vertices = mesh.positions[np.unique(mesh.quads[water])]
+    # El agua sobresale por encima de la losa y conserva la altura de una fuente.
+    assert water_vertices[:, 1].max() == pytest.approx(8.0 / 9.0 * 10.0 / 12.0 - 0.001)
+    assert water_vertices[:, 1].max() > 0.5
+    # El tinte sale del fluido, no del bloque anfitrión (que daría verde de césped).
+    assert ("minecraft:block/water_still", "#3f76e4") in builder.atlas._sprites
+
+
+def test_waterlogged_false_does_not_add_fluid():
+    builder = fluid_setup()
+    slab = BlockState("test:slab", (("waterlogged", "false"),))
+    region = _region([AIR, slab], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 6
+    assert set(mesh.alpha_mode.tolist()) == {0}
+
+
+def test_waterlogged_slab_connects_to_adjacent_water():
+    """El agua de una losa *waterlogged* comparte superficie y caras con el agua vecina."""
+    builder = fluid_setup()
+    slab = BlockState("test:slab", (("waterlogged", "true"),))
+    region = _region([AIR, slab, WATER], [1, 2], (2, 1, 1))
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+
+    # 6 caras de losa + 6 agua de la losa + 6 del bloque de agua - 2 de la unión.
+    water = np.where(mesh.alpha_mode == 2)[0]
+    assert len(water) == 10
+    water_vertices = mesh.positions[np.unique(mesh.quads[water])]
+    # Esquina compartida: agua propia y vecina (peso 10 cada una) y dos lados secos
+    # (peso 1 cada uno), menos el desplazamiento de la superficie.
+    assert water_vertices[:, 1].max() == pytest.approx(8.0 / 9.0 * 20.0 / 22.0 - 0.001)
 
 
 def test_slab_does_not_cull_the_cube_behind_it():
@@ -862,6 +925,32 @@ def test_real_fixture_mesh():
     assert mesh.uvs.max() <= 1.0
     # Las normales tienen que apuntar hacia fuera también en modelos reales.
     assert_normals_match_winding(mesh, "fixture")
+
+
+def test_real_waterlogged_slab_and_stairs_add_fluid():
+    """Los blockstates reales de losa y escalera conservan su geometría y añaden agua."""
+    from _jar import jar_resources
+
+    slab = BlockState("minecraft:oak_slab", (("type", "bottom"), ("waterlogged", "true")))
+    stairs = BlockState(
+        "minecraft:oak_stairs",
+        (
+            ("facing", "east"),
+            ("half", "bottom"),
+            ("shape", "straight"),
+            ("waterlogged", "true"),
+        ),
+    )
+    region = _region([AIR, slab, stairs], [1, 2], (2, 1, 1))
+    doc = _doc([region], (2, 1, 1))
+    builder = MeshBuilder(ModelResolver(jar_resources()))
+    mesh = builder.build(doc)
+
+    assert not builder.atlas.missing
+    # Dos bloques *waterlogged* contiguos: 6 caras de agua cada uno menos la unión.
+    assert int((mesh.alpha_mode == 2).sum()) == 10
+    # La losa y la escalera conservan sus caras opacas.
+    assert int((mesh.alpha_mode == 0).sum()) > 0
 
 
 def test_real_panes_complete_stale_connections_and_cull_the_joint():

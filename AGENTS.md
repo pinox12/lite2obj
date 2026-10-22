@@ -87,8 +87,12 @@ Pipeline order, each layer assuming the previous:
     (`tintindex=0`); an unfed source is `8/9` and each level drops `1/9`. Same-fluid faces are
     culled explicitly in **every** direction (`_fluid_culls`) because fluids are translucent
     and `covers` never culls them; continuity comes from the sloped surface, not internal
-    vertical walls. Fluid templates are cached by state plus the four rounded corner heights.
-    The fluid inside waterlogged blocks is not rendered.
+    vertical walls. Fluid templates are cached by state plus the four rounded corner heights
+    and the bottom offset. Waterlogged blocks (`waterlogged=true`) keep their block geometry
+    and add the fluid inside; mark those fluid quads with `QuadTemplate.fluid` so only they
+    use `_fluid_culls` and the host slab/stair keeps its own culling rules. Apply vanilla's
+    `0.001` insets/drop so the fluid is not coplanar with the host block (Blender keeps one
+    of coincident faces). Fluid tint is resolved with the fluid name, not the host block.
   - `MeshBuilder.build()` calls `atlas.build()` and only then finalizes state UVs.
     Sprites are registered while building state templates; don't finalize before packing.
 - Atlas: power-of-two, shelf-packed, 2 px padding, alpha modes 0/1/2

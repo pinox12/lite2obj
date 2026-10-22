@@ -129,8 +129,12 @@ Notas de fidelidad:
   pesan diez veces más). Bloques contiguos comparten exactamente el borde, así que una
   corriente de niveles `0, 1, 2…` forma una rampa continua en vez de escalones de `1/9`. La
   altura propia sigue siendo `8/9` para una fuente y baja `1/9` por nivel; con el mismo fluido
-  encima el bloque se llena hasta `1`. El fluido de los bloques *waterlogged* (losas,
-  escaleras…) todavía no se dibuja: se conserva sólo la geometría del bloque.
+  encima el bloque se llena hasta `1`. Los bloques *waterlogged* (losas, escaleras, vallas,
+  plantas…) conservan su geometría y además dibujan el agua que contienen; sus caras de
+  fluido se marcan aparte para que el descarte entre fluidos no borre el canto del bloque.
+  Como `FluidRenderer`, las caras laterales se meten `0.001` hacia dentro y la superficie y
+  el fondo se desplazan `0.001`: así el agua no queda coplanaria con la losa o escalera que
+  la aloja y Blender no descarta una de las dos caras.
 - **Entidades cojín**: `minecraft:cushion` no es un bloque, sino una entidad que Litematica
   guarda en `Region.Entities`. Se renderiza con la geometría real de `CushionModel`
   (caja de `1 x 0.25 x 1`, `CubeDeformation(-0.005)`), su textura

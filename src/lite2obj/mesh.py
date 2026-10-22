@@ -128,6 +128,10 @@ _OPPOSITE: dict[str, str] = {
     "east": "west",
 }
 
+#: Desplazamiento que vanilla aplica a las caras de fluido para no coincidir con el bloque
+#: que las contiene (``FluidRenderer``): lados hacia dentro, superficie y fondo ``0.001``.
+_FLUID_INSET = 0.001
+
 #: Etiqueta ``minecraft:bars`` del jar: barras que se ocultan entre sí (no las vidrieras).
 _BARS_TAG = frozenset(
     {
@@ -504,6 +508,9 @@ class QuadTemplate:
     cullface: str | None
     alpha_mode: int
     tintindex: int | None
+    #: Cara de fluido: entre dos bloques del mismo fluido se descarta aunque el bloque
+    #: anfitrión (una losa *waterlogged*, por ejemplo) no sea un fluido completo.
+    fluid: bool = False
 
 
 @dataclass(slots=True)
@@ -670,7 +677,8 @@ class MeshBuilder:
             tints=self.options.tint_colors or dict(DEFAULT_TINTS),
         )
         self._states: dict[tuple[str, tuple[tuple[str, int, int, bool], ...], bool], StateMesh] = {}
-        self._fluids: dict[tuple[str, tuple[float, ...]], StateMesh] = {}
+        self._fluids: dict[tuple[str, tuple[float, ...], float], StateMesh] = {}
+        self._waterlogged: dict[tuple[int, int], StateMesh] = {}
         self._cushions: dict[tuple[str, int], StateMesh] = {}
 
     # -- plantillas -------------------------------------------------------- #
@@ -818,10 +826,18 @@ class MeshBuilder:
     # -- fluidos ----------------------------------------------------------- #
 
     def _fluid(self, block: BlockState | None) -> str | None:
-        """Nombre del fluido del bloque (``water``/``lava``) o ``None``."""
+        """Nombre del fluido que contiene el bloque (``water``/``lava``) o ``None``.
+
+        Los bloques *waterlogged* (losas, escaleras, vallas, plantas...) no son fluidos por
+        sí mismos, pero su estado declara ``waterlogged=true``: el renderer de vanilla les
+        pinta agua dentro. Se tratan como agua a efectos de altura, conexión y descarte.
+        """
         if block is None:
             return None
-        return self.resolver.fallbacks.is_fluid(block.path)
+        fluid = self.resolver.fallbacks.is_fluid(block.path)
+        if fluid is not None:
+            return fluid
+        return "water" if _block_prop(block, "waterlogged") else None
 
     def _fluid_above(
         self,
@@ -905,22 +921,38 @@ class MeshBuilder:
         position: tuple[int, int, int],
         voxels: dict[tuple[int, int, int], BlockState],
     ) -> StateMesh:
-        """Plantilla de fluido con la superficie inclinada por esquinas."""
+        """Plantilla de fluido con la superficie inclinada por esquinas.
+
+        Se aplican los mismos desplazamientos que ``FluidRenderer``: las caras laterales se
+        meten ``0.001`` hacia dentro, la superficie baja ``0.001`` y el fondo sube ``0.001``
+        cuando no continúa el fluido debajo. Sin ellos, el agua *waterlogged* quedaría
+        coplanaria con la losa o escalera que la contiene y Blender descartaría una de las
+        dos caras al importar.
+        """
         heights = self._fluid_corner_heights(block, fluid, position, voxels)
-        key = (self.state_key(block), tuple(round(height, 6) for height in heights))
+        x, y, z = position
+        below = voxels.get((x, y - 1, z))
+        bottom = 0.0 if self._fluid(below) == fluid else _FLUID_INSET
+        key = (
+            self.state_key(block),
+            tuple(round(height, 6) for height in heights),
+            bottom,
+        )
         cached = self._fluids.get(key)
         if cached is not None:
             return cached
 
-        nw, sw, se, ne = heights
+        # Con el mismo fluido encima la columna es continua: no hay superficie que bajar.
+        top = 0.0 if self._fluid_above(voxels, position, fluid) else _FLUID_INSET
+        nw, sw, se, ne = (max(height - top, 0.0) for height in heights)
         corners = np.array(
             [
-                [0.0, 0.0, 0.0],
-                [1.0, 0.0, 0.0],
+                [0.0, bottom, 0.0],
+                [1.0, bottom, 0.0],
                 [1.0, ne, 0.0],
                 [0.0, nw, 0.0],
-                [0.0, 0.0, 1.0],
-                [1.0, 0.0, 1.0],
+                [0.0, bottom, 1.0],
+                [1.0, bottom, 1.0],
                 [1.0, se, 1.0],
                 [0.0, sw, 1.0],
             ],
@@ -928,11 +960,21 @@ class MeshBuilder:
         )
         texture = FLUID_TEXTURES.get(fluid, f"minecraft:block/{fluid}_still")
         tintindex = 0 if fluid == "water" else None
-        sprite = self.atlas.add(texture, self.tints.tint_for(block.name, tintindex))
+        # El tinte se resuelve con el nombre del fluido, no con el bloque anfitrión: una
+        # escalera *waterlogged* no debe teñir el agua con el verde del césped.
+        sprite = self.atlas.add(texture, self.tints.tint_for(f"minecraft:{fluid}", tintindex))
         alpha_mode = self.atlas.alpha_mode(sprite)
         templates: list[QuadTemplate] = []
         for direction in FACE_DIRECTIONS:
-            positions = corners[list(FACE_CORNERS[direction])]
+            positions = corners[list(FACE_CORNERS[direction])].copy()
+            if direction == "north":
+                positions[:, 2] += _FLUID_INSET
+            elif direction == "south":
+                positions[:, 2] -= _FLUID_INSET
+            elif direction == "west":
+                positions[:, 0] += _FLUID_INSET
+            elif direction == "east":
+                positions[:, 0] -= _FLUID_INSET
             st = np.zeros((4, 2), dtype=np.float32)
             for slot, corner in enumerate(FACE_UV_ORDER[direction]):
                 st[slot] = UV_CORNERS[corner]
@@ -945,11 +987,39 @@ class MeshBuilder:
                     cullface=direction,
                     alpha_mode=alpha_mode,
                     tintindex=tintindex,
+                    fluid=True,
                 )
             )
 
         state = StateMesh(block=block, templates=tuple(templates), covers=False)
         self._fluids[key] = state
+        return state
+
+    def _waterlogged_state_mesh(
+        self,
+        block: BlockState,
+        fluid: str,
+        position: tuple[int, int, int],
+        voxels: dict[tuple[int, int, int], BlockState],
+    ) -> StateMesh:
+        """Geometría del bloque *waterlogged* más el fluido que contiene.
+
+        El bloque conserva sus caras y el agua añade las suyas, marcadas con
+        ``QuadTemplate.fluid`` para que sólo ellas usen la regla de descarte entre fluidos.
+        Así una losa o una escalera no pierde su canto contra el agua vecina.
+        """
+        base = self.state_mesh(block, position)
+        water = self._fluid_state_mesh(block, fluid, position, voxels)
+        key = (id(base), id(water))
+        cached = self._waterlogged.get(key)
+        if cached is not None:
+            return cached
+        state = StateMesh(
+            block=block,
+            templates=base.templates + water.templates,
+            covers=base.covers,
+        )
+        self._waterlogged[key] = state
         return state
 
     def _fluid_culls(self, block: BlockState, neighbour: BlockState) -> bool:
@@ -996,10 +1066,14 @@ class MeshBuilder:
                 block_index[key] = len(block_palette)
                 block_palette.append(block)
             fluid = self._fluid(block)
-            if fluid is not None:
+            if fluid is None:
+                placed[position] = self.state_mesh(block, position)
+            elif self.resolver.fallbacks.is_fluid(block.path) is not None:
+                # Bloque de fluido puro: sólo agua/lava, sin geometría de bloque.
                 placed[position] = self._fluid_state_mesh(block, fluid, position, voxels)
             else:
-                placed[position] = self.state_mesh(block, position)
+                # Losa, escalera, valla... con ``waterlogged=true``: bloque + fluido.
+                placed[position] = self._waterlogged_state_mesh(block, fluid, position, voxels)
 
         # Las entidades no ocupan la rejilla de bloques: se recogen aparte y se emiten al
         # final. ``Pos`` es relativo a la esquina 1 de la selección (``Position``), que no
@@ -1067,12 +1141,15 @@ class MeshBuilder:
                     if covers.get(neighbour_pos, False):
                         continue
                     neighbour = voxels.get(neighbour_pos)
-                    if neighbour is not None and _skips_rendering(
-                        state.block, neighbour, template.cullface
-                    ):
-                        continue
-                    if neighbour is not None and self._fluid_culls(state.block, neighbour):
-                        continue
+                    if neighbour is not None:
+                        if template.fluid:
+                            # Sólo las caras de agua descartan contra otro bloque que
+                            # contenga el mismo fluido; las caras de la losa/escalera que
+                            # lo aloja siguen su regla normal.
+                            if self._fluid_culls(state.block, neighbour):
+                                continue
+                        elif _skips_rendering(state.block, neighbour, template.cullface):
+                            continue
                 if limit and len(meta) >= limit:
                     partial = True
                     break
