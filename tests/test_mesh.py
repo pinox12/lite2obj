@@ -55,6 +55,17 @@ def make_png(width: int = 16, height: int = 16, color=(255, 255, 255, 255)) -> b
     return buffer.getvalue()
 
 
+def make_cushion_png(color=(255, 0, 0, 255)) -> bytes:
+    """PNG 64x64 con sólo las primeras 20 filas usadas, como el de una entidad cojín."""
+    image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    for y in range(20):
+        for x in range(64):
+            image.putpixel((x, y), color)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def _model(texture: str = "minecraft:block/tex", *, cullface: bool = True) -> dict:
     faces = {}
     for direction in EXPECTED_FACE_NORMALS:
@@ -84,6 +95,15 @@ def cube_setup(texture: str = "minecraft:block/tex", *, cullface: bool = True) -
             texture_path(texture): make_png(),
         }
     )
+
+
+def cushion_setup(*colors: str) -> MeshBuilder:
+    """Builder sin bloques, con las texturas de entidad de los colores indicados."""
+    entries = {
+        texture_path(f"minecraft:entity/cushion/{color}_cushion"): make_cushion_png()
+        for color in colors
+    }
+    return make_setup(entries)
 
 
 def _pane_model(direction: str) -> dict:
@@ -421,6 +441,113 @@ def test_single_cube_mesh_has_six_quads():
     assert mesh.positions.min() >= 0.0
     assert mesh.positions.max() == pytest.approx(1.0)
     assert mesh.atlas.image.size == builder.atlas.size
+
+
+def test_cushion_entity_geometry_and_texture():
+    """La entidad se dibuja como una caja de 1x0.25x1 con las UV de ``CushionModel``."""
+    builder = cushion_setup("red")
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {
+            "id": "minecraft:cushion",
+            "Pos": [0.5, 0.0, 0.5],
+            "Rotation": [0.0, 0.0],
+            "color": "red",
+        }
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 6
+    assert mesh.vertex_count == 24
+    assert mesh.atlas.sprite_count == 1
+    assert not mesh.atlas.missing
+    assert mesh.palette[-1].name == "minecraft:cushion"
+    assert np.all(mesh.block == len(mesh.palette) - 1)
+    assert np.all(mesh.alpha_mode == 1)  # el PNG de cojín es cutout
+
+    # CubeDeformation(-0.005): 15.99 x 3.99 x 15.99 px, con la base en la posición Y.
+    assert mesh.positions.min(axis=0) == pytest.approx([0.0003125, 0.0003125, 0.0003125], abs=1e-6)
+    assert mesh.positions.max(axis=0) == pytest.approx([0.9996875, 0.2496875, 0.9996875], abs=1e-6)
+
+    normals = mesh.normals[mesh.quads[:, 0]]
+    expected = {
+        (-1.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, -1.0),
+        (0.0, 0.0, 1.0),
+    }
+    assert {tuple(np.round(normal, 6)) for normal in normals} == expected
+    for quad, normal in zip(mesh.quads, normals, strict=True):
+        a, b, c = mesh.positions[quad[:3]]
+        assert np.dot(np.cross(b - a, c - a), normal) > 0.0
+
+    # La cara superior toma la región (0.25..0.5, 0..0.25) del modelo, dentro del sprite.
+    top = int(np.argmax(normals[:, 1]))
+    sprite = mesh.atlas.sprite("minecraft:entity/cushion/red_cushion")
+    assert sprite is not None
+    width, height = mesh.atlas.size
+    u0 = sprite.x / width
+    v0 = sprite.y / height
+    du = sprite.width / width
+    dv = sprite.height / height
+    top_uvs = mesh.uvs[mesh.quads[top]]
+    assert np.allclose(
+        np.unique(top_uvs[:, 0]),
+        [u0 + 0.25 * du, u0 + 0.5 * du],
+    )
+    assert np.allclose(np.unique(top_uvs[:, 1]), [v0, v0 + 0.25 * dv])
+
+
+def test_cushion_positions_are_relative_to_the_selection_corner_one():
+    """``Position`` (esquina 1) no es la esquina mínima: las entidades usan la primera."""
+    builder = cushion_setup("red")
+    region = _region([AIR], [0, 0], (2, 1, 1), position=(4, 0, 0))
+    region.position = (5, 0, 0)  # corner 1 de una selección de tamaño negativo
+    region.entities = [
+        {
+            "id": "minecraft:cushion",
+            "Pos": [-0.5, 0.5, 0.5],
+            "Rotation": [0.0, 0.0],
+            "color": "red",
+        }
+    ]
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+
+    assert mesh.origin == (4, 0, 0)
+    center = (mesh.positions.min(axis=0) + mesh.positions.max(axis=0)) / 2.0
+    assert center[0] == pytest.approx(0.5)
+    assert center[2] == pytest.approx(0.5)
+
+
+def test_cushion_colors_fall_back_to_white_and_bad_entities_are_ignored():
+    builder = cushion_setup("white", "red")
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {
+            "id": "minecraft:cushion",
+            "Pos": [0.5, 0.0, 0.5],
+            "Rotation": [0.0, 0.0],
+            "color": "chartreuse",
+        },
+        {
+            "id": "minecraft:cushion",
+            "Pos": [1.5, 0.0, 0.5],
+            "Rotation": [90.0, 0.0],
+            "color": "red",
+        },
+        {"id": "minecraft:armor_stand", "Pos": [2.5, 0.0, 0.5]},
+        {"id": "minecraft:cushion", "Pos": [3.5, 0.0]},  # Pos incompleto: se ignora
+    ]
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+
+    assert mesh.quad_count == 12
+    assert mesh.atlas.sprite("minecraft:entity/cushion/white_cushion") is not None
+    assert mesh.atlas.sprite("minecraft:entity/cushion/red_cushion") is not None
+    # El color inválido no registra una textura inexistente.
+    assert "minecraft:entity/cushion/chartreuse_cushion" not in mesh.atlas.missing
+    assert len({int(sprite) for sprite in mesh.sprite}) == 2
 
 
 def test_neighbouring_full_cubes_cull_shared_faces():

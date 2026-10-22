@@ -137,6 +137,9 @@ class Region:
     de Litematica solo describe la caja de selección (el contenedor se guarda de
     mínimo a máximo), así que un tamaño negativo no espeja el array: los estados
     de los bloques deben conservarse tal cual vienen del mundo.
+
+    ``position`` es la ``Position`` original (esquina 1 de la selección). Las entidades
+    guardan su ``Pos`` relativo a esa esquina, no a ``origin``.
     """
 
     name: str
@@ -147,6 +150,10 @@ class Region:
     tile_entities: list[dict[str, Any]] = field(default_factory=list)
     entities: list[dict[str, Any]] = field(default_factory=list)
     air_mask: np.ndarray = field(default_factory=lambda: np.zeros(1, dtype=bool))
+    #: ``Position`` tal cual viene en el NBT (esquina 1 de la selección). Las entidades
+    #: guardan ``Pos`` relativo a esta esquina, no a ``origin``; ``None`` en regiones
+    #: construidas a mano significa que se usa ``origin`` como referencia.
+    position: tuple[int, int, int] | None = None
 
     @property
     def volume(self) -> int:
@@ -286,6 +293,7 @@ def _build_region(name: str, data: dict[str, Any]) -> Region:
         tile_entities=list(data.get("TileEntities") or []),
         entities=list(data.get("Entities") or []),
         air_mask=np.array([b.is_air for b in palette], dtype=bool),
+        position=position,
     )
 
 

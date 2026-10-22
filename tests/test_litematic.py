@@ -211,6 +211,7 @@ def test_negative_size_uses_min_corner_without_mirroring_the_grid():
     region = doc.regions[0]
     assert region.size == (2, 1, 1)
     assert region.origin == (4, 0, 0)
+    assert region.position == (5, 0, 0)
     assert region.block_at(0, 0, 0).path == "gold_block"
     assert region.block_at(1, 0, 0).path == "iron_block"
     assert sorted(doc.iter_blocks()) == [

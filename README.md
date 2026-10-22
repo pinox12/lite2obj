@@ -12,11 +12,11 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F1 | Parser `.litematic` (NBT + bit-packing YZX) | ✅ hecho |
 | F2 | Resolución de blockstates/modelos desde el client jar | ✅ hecho |
 | F3 | Texturas y atlas | ✅ hecho |
-| F4 | Malla y culling por `cullface` | ✅ hecho |
+| F4 | Malla, culling por `cullface` y entidades (cojines) | ✅ hecho |
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 207 tests |
+| F8 | Tests | ✅ 237 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -128,6 +128,13 @@ Notas de fidelidad:
   las superficies inclinadas suavizadas de Minecraft no se reproducen. El fluido de los bloques
   *waterlogged* (losas, escaleras…) todavía no se dibuja: se conserva sólo la geometría del
   bloque.
+- **Entidades cojín**: `minecraft:cushion` no es un bloque, sino una entidad que Litematica
+  guarda en `Region.Entities`. Se renderiza con la geometría real de `CushionModel`
+  (caja de `1 x 0.25 x 1`, `CubeDeformation(-0.005)`), su textura
+  `entity/cushion/<color>_cushion.png` y el giro de `CushionRenderer`. `Pos` se interpreta
+  relativo a la esquina 1 de la selección (`Position`), no a la esquina mínima del recorte.
+  Así aparecen tanto en el visor como en el OBJ. Las demás entidades del esquemático todavía
+  se ignoran.
 - **`uvlock`**: implementado como Minecraft. Antes de aplicar el giro del variant se giran las
   UV absolutas alrededor del centro de la textura (píxel `8,8`), así que la textura no gira con
   el bloque. Es lo que mantiene derecha la contrahuella de las escaleras boca abajo
@@ -195,7 +202,7 @@ src/lite2obj/
   fallbacks.py   geometría sustituta (fluidos, bloques de entidad)
   aliases.py     bloques renombrados entre versiones
   textures.py    atlas de texturas, sprites teñidos
-  mesh.py        malla del esquemático (caras, UV, culling)
+  mesh.py        malla del esquemático (caras, UV, culling, entidades)
   export.py      OBJ + MTL + atlas
   pipeline.py    alto nivel (CLI y app) + búfer binario del visor
   cli.py         interfaz de línea de comandos

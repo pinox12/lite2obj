@@ -11,6 +11,8 @@ coordenadas UV de atlas. El proceso:
    dirección es un cubo completo opaco (y, entre vidrieras conectadas, por
    ``IronBarsBlock.skipRendering``), igual que hace Minecraft.
 3. **Emisión**: se recorre la rejilla de vóxeles y se vuelcan las caras visibles.
+4. **Entidades**: los cojines se añaden como geometría de entidad al final de la malla, con
+   su textura de color y su posición relativa a la esquina 1 de la selección.
 
 Orden de caras y UV
 -------------------
@@ -25,6 +27,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -194,6 +197,116 @@ _HORIZONTAL: tuple[tuple[str, tuple[int, int, int]], ...] = (
 
 _MODEL_UNITS = 16.0
 
+#: Colores de tinte válidos para ``minecraft:cushion``. El color ausente o desconocido cae
+#: en blanco, igual que en Minecraft.
+_CUSHION_COLORS = frozenset(
+    {
+        "white",
+        "orange",
+        "magenta",
+        "light_blue",
+        "yellow",
+        "lime",
+        "pink",
+        "gray",
+        "light_gray",
+        "cyan",
+        "purple",
+        "blue",
+        "brown",
+        "green",
+        "red",
+        "black",
+    }
+)
+
+#: Estado ficticio que usan los cojines para aparecer en estadísticas y agrupaciones del OBJ.
+_CUSHION_BLOCK = BlockState("minecraft:cushion")
+
+#: Caja de ``CushionModel``: 16x4x16 px con ``CubeDeformation(-0.005)``, antes de las
+#: rotaciones del renderizador. El desplazamiento ``PartPose`` y el ``translate(0,-0.25,0)``
+#: de ``CushionRenderer`` se cancelan en Y; en X/Z dejan la caja centrada en la entidad.
+_CUSHION_HALF = 7.995 / _MODEL_UNITS
+_CUSHION_BOTTOM = -3.995 / _MODEL_UNITS
+_CUSHION_TOP = -0.005 / _MODEL_UNITS
+
+#: Caras del modelo con las UV normalizadas del PNG (64x64) y el orden de vértices de
+#: ``ModelPart.Cube``. Se guardan antes de aplicar ``rotateX(180)`` y el giro de la entidad.
+_CUSHION_QUADS: tuple[tuple[np.ndarray, np.ndarray], ...] = (
+    (
+        np.array(
+            [
+                [_CUSHION_HALF, _CUSHION_BOTTOM, _CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_BOTTOM, _CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_BOTTOM, -_CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_BOTTOM, -_CUSHION_HALF],
+            ],
+            dtype=np.float32,
+        ),
+        np.array([[0.5, 0.0], [0.25, 0.0], [0.25, 0.25], [0.5, 0.25]], dtype=np.float32),
+    ),
+    (
+        np.array(
+            [
+                [_CUSHION_HALF, _CUSHION_TOP, -_CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_TOP, -_CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_TOP, _CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_TOP, _CUSHION_HALF],
+            ],
+            dtype=np.float32,
+        ),
+        np.array([[0.75, 0.25], [0.5, 0.25], [0.5, 0.0], [0.75, 0.0]], dtype=np.float32),
+    ),
+    (
+        np.array(
+            [
+                [-_CUSHION_HALF, _CUSHION_BOTTOM, -_CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_BOTTOM, _CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_TOP, _CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_TOP, -_CUSHION_HALF],
+            ],
+            dtype=np.float32,
+        ),
+        np.array([[0.25, 0.25], [0.0, 0.25], [0.0, 0.3125], [0.25, 0.3125]], dtype=np.float32),
+    ),
+    (
+        np.array(
+            [
+                [_CUSHION_HALF, _CUSHION_BOTTOM, -_CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_BOTTOM, -_CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_TOP, -_CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_TOP, -_CUSHION_HALF],
+            ],
+            dtype=np.float32,
+        ),
+        np.array([[0.5, 0.25], [0.25, 0.25], [0.25, 0.3125], [0.5, 0.3125]], dtype=np.float32),
+    ),
+    (
+        np.array(
+            [
+                [_CUSHION_HALF, _CUSHION_BOTTOM, _CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_BOTTOM, -_CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_TOP, -_CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_TOP, _CUSHION_HALF],
+            ],
+            dtype=np.float32,
+        ),
+        np.array([[0.75, 0.25], [0.5, 0.25], [0.5, 0.3125], [0.75, 0.3125]], dtype=np.float32),
+    ),
+    (
+        np.array(
+            [
+                [-_CUSHION_HALF, _CUSHION_BOTTOM, _CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_BOTTOM, _CUSHION_HALF],
+                [_CUSHION_HALF, _CUSHION_TOP, _CUSHION_HALF],
+                [-_CUSHION_HALF, _CUSHION_TOP, _CUSHION_HALF],
+            ],
+            dtype=np.float32,
+        ),
+        np.array([[1.0, 0.25], [0.75, 0.25], [0.75, 0.3125], [1.0, 0.3125]], dtype=np.float32),
+    ),
+)
+
 
 def _winding_normal(quad: np.ndarray) -> np.ndarray:
     """Normal unitaria según el giro de los vértices (hacia fuera).
@@ -208,6 +321,66 @@ def _winding_normal(quad: np.ndarray) -> np.ndarray:
     if length < 1e-9:
         return np.zeros(3, dtype=np.float32)
     return (vector / length).astype(np.float32)
+
+
+# --------------------------------------------------------------------------- #
+# Entidades
+# --------------------------------------------------------------------------- #
+
+
+def _is_cushion(entity: dict[str, Any]) -> bool:
+    """Cierto para la entidad ``minecraft:cushion`` (con o sin namespace)."""
+    return str(entity.get("id", "")).split(":")[-1] == "cushion"
+
+
+def _entity_vec3(entity: dict[str, Any], key: str) -> tuple[float, float, float] | None:
+    """Lee un vector de tres números del NBT de una entidad, o ``None`` si no es válido."""
+    value = entity.get(key)
+    if not isinstance(value, (list, tuple, np.ndarray)) or len(value) < 3:
+        return None
+    try:
+        return (float(value[0]), float(value[1]), float(value[2]))
+    except TypeError, ValueError:
+        return None
+
+
+def _entity_yaw(entity: dict[str, Any]) -> float:
+    """Yaw de la entidad en grados; si falta ``Rotation`` se asume 0."""
+    value = entity.get("Rotation")
+    if not isinstance(value, (list, tuple, np.ndarray)) or not value:
+        return 0.0
+    try:
+        return float(value[0])
+    except TypeError, ValueError:
+        return 0.0
+
+
+def _cushion_color(entity: dict[str, Any]) -> str:
+    """Color válido del cojín; los valores ausentes o desconocidos son blancos."""
+    color = str(entity.get("color", "white")).lower().split(":")[-1]
+    return color if color in _CUSHION_COLORS else "white"
+
+
+def _snap_cushion_yaw(yaw: float) -> int:
+    """Cuantiza el yaw al múltiplo de 90 que usa ``Direction.fromYRot``."""
+    return int(math.floor(yaw / 90.0 + 0.5)) * 90 % 360
+
+
+def _transform_cushion(positions: np.ndarray, yaw: int) -> np.ndarray:
+    """Aplica las rotaciones de ``CushionRenderer`` a la caja local.
+
+    El renderizador hace ``rotateY(180 - direction.toYRot())`` y luego ``rotateX(180)``.
+    La caja de :data:`_CUSHION_QUADS` ya incluye la cancelación de la traslación Y; aquí
+    sólo quedan las dos rotaciones, y el resultado final tiene la base en ``y = 0``.
+    """
+    # rotateX(180): (x, y, z) -> (x, -y, -z)
+    x = positions[:, 0]
+    y = -positions[:, 1]
+    z = -positions[:, 2]
+    angle = math.radians(180 - yaw)
+    cos, sin = math.cos(angle), math.sin(angle)
+    # rotateY de JOML/Minecraft: x' = cos*x + sin*z, z' = -sin*x + cos*z.
+    return np.column_stack((cos * x + sin * z, y, -sin * x + cos * z)).astype(np.float32)
 
 
 def rotate_uv(s: float, t: float, rotation: int) -> tuple[float, float]:
@@ -496,6 +669,7 @@ class MeshBuilder:
             tints=self.options.tint_colors or dict(DEFAULT_TINTS),
         )
         self._states: dict[tuple[str, tuple[tuple[str, int, int, bool], ...], bool], StateMesh] = {}
+        self._cushions: dict[tuple[str, int], StateMesh] = {}
 
     # -- plantillas -------------------------------------------------------- #
 
@@ -607,6 +781,38 @@ class MeshBuilder:
         self._states[key] = state
         return state
 
+    def _cushion_state(self, color: str, yaw: int) -> StateMesh:
+        """Plantilla local de un cojín de un color y giro concretos.
+
+        El cojín no es un bloque: se resuelve con la geometría de ``CushionModel`` y su
+        textura de entidad. Se cachea por ``(color, yaw)`` porque hay cientos de copias del
+        mismo modelo en un castillo.
+        """
+        key = (color, yaw)
+        cached = self._cushions.get(key)
+        if cached is not None:
+            return cached
+
+        sprite = self.atlas.add(f"minecraft:entity/cushion/{color}_cushion")
+        alpha_mode = self.atlas.alpha_mode(sprite)
+        templates: list[QuadTemplate] = []
+        for positions, st in _CUSHION_QUADS:
+            rotated = _transform_cushion(positions, yaw)
+            templates.append(
+                QuadTemplate(
+                    positions=rotated,
+                    normal=_winding_normal(rotated),
+                    st=st,
+                    sprite=sprite,
+                    cullface=None,
+                    alpha_mode=alpha_mode,
+                    tintindex=None,
+                )
+            )
+        state = StateMesh(block=_CUSHION_BLOCK, templates=tuple(templates), covers=False)
+        self._cushions[key] = state
+        return state
+
     # -- fluidos ----------------------------------------------------------- #
 
     def _fluid(self, block: BlockState | None) -> str | None:
@@ -693,6 +899,39 @@ class MeshBuilder:
             fluid_above = fluid is not None and self._fluid_above(voxels, position, fluid)
             placed[position] = self.state_mesh(block, position, fluid_above=fluid_above)
 
+        # Las entidades no ocupan la rejilla de bloques: se recogen aparte y se emiten al
+        # final. ``Pos`` es relativo a la esquina 1 de la selección (``Position``), que no
+        # tiene por qué coincidir con la esquina mínima de ``origin``.
+        cushions: list[tuple[tuple[float, float, float], StateMesh]] = []
+        for region in doc.regions:
+            base = region.position if region.position is not None else region.origin
+            for entity in region.entities:
+                if not _is_cushion(entity):
+                    continue
+                pos = _entity_vec3(entity, "Pos")
+                if pos is None:
+                    continue
+                yaw = _snap_cushion_yaw(_entity_yaw(entity))
+                state = self._cushion_state(_cushion_color(entity), yaw)
+                cushions.append(
+                    (
+                        (
+                            base[0] + pos[0] - origin[0],
+                            base[1] + pos[1] - origin[1],
+                            base[2] + pos[2] - origin[2],
+                        ),
+                        state,
+                    )
+                )
+
+        cushion_palette_index = -1
+        if cushions:
+            cush_key = self.state_key(_CUSHION_BLOCK)
+            if cush_key not in block_index:
+                block_index[cush_key] = len(block_palette)
+                block_palette.append(_CUSHION_BLOCK)
+            cushion_palette_index = block_index[cush_key]
+
         self.atlas.build()
         finalized: set[int] = set()
         for state in placed.values():
@@ -700,13 +939,18 @@ class MeshBuilder:
             if marker not in finalized:
                 finalized.add(marker)
                 state.finalize(self.atlas)
+        for _, state in cushions:
+            marker = id(state)
+            if marker not in finalized:
+                finalized.add(marker)
+                state.finalize(self.atlas)
 
         covers = {position: state.covers for position, state in placed.items()}
 
-        buffer = _Buffer(len(placed))
+        buffer = _Buffer(len(placed) + len(cushions))
         meta: list[tuple[int, int, int, int]] = []
         partial = False
-        total = len(placed)
+        total = len(placed) + len(cushions)
         limit = options.max_quads
 
         for done, (position, state) in enumerate(placed.items()):
@@ -750,6 +994,29 @@ class MeshBuilder:
                 )
             if partial:
                 break
+
+        if not partial:
+            for done, (entity_position, state) in enumerate(cushions, start=len(placed)):
+                if options.progress is not None and done % 20000 == 0:
+                    options.progress(done, total)
+                ex, ey, ez = entity_position
+                for quad_index, template in enumerate(state.templates):
+                    if limit and len(meta) >= limit:
+                        partial = True
+                        break
+                    positions = template.positions + (ex, ey, ez)
+                    start = buffer.cursor
+                    buffer.add_quad(positions, state.uvs[quad_index], template.normal)
+                    meta.append(
+                        (
+                            start,
+                            int(state.sprite_ids[quad_index]),
+                            int(state.alpha_modes[quad_index]),
+                            cushion_palette_index,
+                        )
+                    )
+                if partial:
+                    break
 
         if options.progress is not None:
             options.progress(total, total)

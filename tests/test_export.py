@@ -7,7 +7,7 @@ from io import BytesIO
 import numpy as np
 import pytest
 from PIL import Image
-from test_mesh import AIR, _doc, _region, cube_setup
+from test_mesh import AIR, _doc, _region, cube_setup, cushion_setup
 
 from lite2obj.assets import MemorySource, ResourceManager
 from lite2obj.export import ExportOptions, export_obj, obj_geometry
@@ -135,6 +135,26 @@ def test_group_by_block_emits_groups(tmp_path):
     mesh, _ = single_cube_mesh()
     result = export_obj(mesh, tmp_path, ExportOptions(group_by="block"))
     assert "g test_cube" in result.obj.read_text(encoding="utf-8")
+
+
+def test_cushion_entities_are_included_in_export(tmp_path):
+    builder = cushion_setup("cyan")
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {
+            "id": "minecraft:cushion",
+            "Pos": [0.5, 0.0, 0.5],
+            "Rotation": [180.0, 0.0],
+            "color": "cyan",
+        }
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+    result = export_obj(mesh, tmp_path, ExportOptions(group_by="block"))
+
+    lines = read_obj(result.obj)
+    assert result.faces == 6
+    assert len(lines_starting(lines, "f ")) == 6
+    assert "g minecraft_cushion" in lines
 
 
 def test_group_by_alpha_emits_groups(tmp_path):
