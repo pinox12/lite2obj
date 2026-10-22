@@ -121,13 +121,16 @@ Notas de fidelidad:
 - **Tintes de bioma**: se usa el color de *plains* para césped, hojas y agua. La hojarasca
   (`leaf_litter`) usa la colormap `dry_foliage`, así que sale marrón y no con el verde del
   césped.
-- **Fluidos**: el agua se tiñe con el color por defecto (bioma *plains*), su superficie queda a
-  `8/9` del bloque (o a `1` cuando hay más fluido encima) y las caras entre bloques del mismo
-  fluido se descartan. Sin ese descarte, el agua translúcida dibujaba todas sus paredes
-  internas y se veía como una rejilla casi opaca. Los niveles de flujo bajan `1/9` por nivel;
-  las superficies inclinadas suavizadas de Minecraft no se reproducen. El fluido de los bloques
-  *waterlogged* (losas, escaleras…) todavía no se dibuja: se conserva sólo la geometría del
-  bloque.
+- **Fluidos**: el agua se tiñe con el color por defecto (bioma *plains*) y las caras entre
+  bloques del mismo fluido se descartan. Sin ese descarte, el agua translúcida dibujaba todas
+  sus paredes internas y se veía como una rejilla casi opaca. La superficie no es plana por
+  bloque: se calculan cuatro alturas de esquina como `FluidRenderer.calculateAverageHeight`,
+  promediando la altura propia con los vecinos y la diagonal (las alturas a partir de `0.8`
+  pesan diez veces más). Bloques contiguos comparten exactamente el borde, así que una
+  corriente de niveles `0, 1, 2…` forma una rampa continua en vez de escalones de `1/9`. La
+  altura propia sigue siendo `8/9` para una fuente y baja `1/9` por nivel; con el mismo fluido
+  encima el bloque se llena hasta `1`. El fluido de los bloques *waterlogged* (losas,
+  escaleras…) todavía no se dibuja: se conserva sólo la geometría del bloque.
 - **Entidades cojín**: `minecraft:cushion` no es un bloque, sino una entidad que Litematica
   guarda en `Region.Entities`. Se renderiza con la geometría real de `CushionModel`
   (caja de `1 x 0.25 x 1`, `CubeDeformation(-0.005)`), su textura

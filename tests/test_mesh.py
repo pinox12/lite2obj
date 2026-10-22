@@ -622,14 +622,16 @@ def fluid_setup() -> MeshBuilder:
     )
 
 
-def test_water_is_tinted_translucent_and_sits_at_8_over_9():
+def test_water_is_tinted_translucent_and_smooths_its_surface():
     builder = fluid_setup()
     region = _region([AIR, WATER], [1], (1, 1, 1))
     mesh = builder.build(_doc([region], (1, 1, 1)))
 
     assert mesh.quad_count == 6
     assert set(mesh.alpha_mode.tolist()) == {2}
-    assert mesh.positions[:, 1].max() == pytest.approx(8.0 / 9.0)
+    # Una fuente rodeada de aire no llega a 8/9: ``calculateAverageHeight`` también
+    # promedia las esquinas secas (peso 1) con la altura propia (peso 10).
+    assert mesh.positions[:, 1].max() == pytest.approx(8.0 / 9.0 * 10.0 / 12.0)
 
     key = ("minecraft:block/water_still", "#3f76e4")
     sprite = builder.atlas._sprites[key]
@@ -648,8 +650,9 @@ def test_water_culls_faces_between_water_blocks():
     # 9 caras superiores + 9 inferiores + 12 laterales; las 24 internas se descartan.
     assert mesh.quad_count == 30
     normals = mesh.normals[mesh.quads[:, 0]]
-    assert int(np.isclose(normals[:, 1], 1.0).sum()) == 9
-    assert int(np.isclose(normals[:, 1], -1.0).sum()) == 9
+    # Las caras superiores ya no son planas: la normal se inclina en los bordes.
+    assert int((normals[:, 1] > 0.5).sum()) == 9
+    assert int((normals[:, 1] < -0.5).sum()) == 9
 
 
 def test_stacked_water_fills_the_block_under_the_surface():
@@ -660,7 +663,9 @@ def test_stacked_water_fills_the_block_under_the_surface():
     # 12 caras menos las dos horizontales internas.
     assert mesh.quad_count == 10
     assert mesh.positions[:, 1].min() == pytest.approx(0.0)
-    assert mesh.positions[:, 1].max() == pytest.approx(1.0 + 8.0 / 9.0)
+    # El bloque inferior llega a 1 porque tiene agua encima; la superficie superior se
+    # suaviza contra el aire que la rodea.
+    assert mesh.positions[:, 1].max() == pytest.approx(1.0 + 8.0 / 9.0 * 10.0 / 12.0)
     normals = mesh.normals[mesh.quads[:, 0]]
     # Sólo hay una cara superior (la de la superficie) y una inferior (la base).
     assert int(np.isclose(normals[:, 1], 1.0).sum()) == 1
@@ -677,19 +682,58 @@ def test_water_against_opaque_neighbour_culls_only_that_face():
     assert int((mesh.block == water_index).sum()) == 5
 
 
-def test_water_keeps_its_side_above_lower_flowing_water():
+def _top_quads(mesh):
+    """Vértices ``(4, 3)`` de las caras superiores, ordenados de oeste a este."""
+    normals = mesh.normals[mesh.quads[:, 0]]
+    tops = [mesh.positions[mesh.quads[index]] for index in np.where(normals[:, 1] > 0.5)[0]]
+    return sorted(tops, key=lambda quad: float(quad[:, 0].mean()))
+
+
+def test_water_and_lower_flowing_water_share_a_continuous_surface():
     builder = fluid_setup()
     flowing = BlockState("minecraft:water", (("level", "7"),))
     region = _region([AIR, WATER, flowing], [1, 2], (2, 1, 1))
     mesh = builder.build(_doc([region], (2, 1, 1)))
 
-    # La fuente conserva su cara este (sobresale por encima del agua baja); la cara oeste
-    # del nivel 7 queda tapada por la fuente.
-    assert mesh.quad_count == 11
+    # Ya no queda ninguna pared vertical entre los dos bloques: sólo las caras exteriores.
+    assert mesh.quad_count == 10
+
+    west, east = _top_quads(mesh)
+    # El borde compartido (NE de la fuente y NW del agua que fluye) coincide exactamente.
+    assert west[3, 1] == pytest.approx(east[0, 1])
+    assert west[2, 1] == pytest.approx(east[1, 1])
+
+
+def test_flowing_water_forms_a_continuous_ramp_instead_of_stairs():
+    """Los niveles 0..3 forman una pendiente continua, no cuatro escalones planos."""
+    builder = fluid_setup()
+    levels = [WATER] + [
+        BlockState("minecraft:water", (("level", str(level)),)) for level in (1, 2, 3)
+    ]
+    region = _region([AIR, *levels], [1, 2, 3, 4], (4, 1, 1))
+    mesh = builder.build(_doc([region], (4, 1, 1)))
+
+    # 4 bloques x 6 caras - 3 uniones x 2 caras internas.
+    assert mesh.quad_count == 18
+
+    tops = _top_quads(mesh)
+    assert len(tops) == 4
+    for left, right in zip(tops, tops[1:], strict=False):
+        # NE/SE del bloque de la izquierda y NW/SW del de la derecha son el mismo borde.
+        assert left[3, 1] == pytest.approx(right[0, 1])
+        assert left[2, 1] == pytest.approx(right[1, 1])
+        # La superficie de cada bloque está inclinada: sus dos bordes no están a la misma
+        # altura. Si fuese una escalera, cada bloque sería plano.
+        assert abs(float(left[3, 1] - left[0, 1])) > 1e-3
+
+    # La altura del borde este desciende a lo largo de la corriente.
+    east_edges = [float((quad[2, 1] + quad[3, 1]) * 0.5) for quad in tops]
+    assert east_edges == sorted(east_edges, reverse=True)
+    assert len(set(np.round(east_edges, 6))) == 4
 
 
 def test_water_surface_is_lower_than_the_adjacent_block():
-    """El agua no llega al techo del bloque: en la orilla se ve el escalón de 1/9."""
+    """El agua no llega al techo del bloque y su orilla se inclina hacia el aire."""
     builder = fluid_setup()
     solid = BlockState("test:solid")
     region = _region([AIR, WATER, solid], [1, 2], (2, 1, 1))
@@ -699,7 +743,8 @@ def test_water_surface_is_lower_than_the_adjacent_block():
     water_index = next(i for i, block in enumerate(mesh.palette) if block.name == WATER.name)
     water_quads = np.where(mesh.block == water_index)[0]
     water_vertices = mesh.positions[np.unique(mesh.quads[water_quads])]
-    assert water_vertices[:, 1].max() == pytest.approx(8.0 / 9.0)
+    assert water_vertices[:, 1].max() < 8.0 / 9.0
+    assert water_vertices[:, 1].max() > 0.7
 
 
 def test_slab_does_not_cull_the_cube_behind_it():

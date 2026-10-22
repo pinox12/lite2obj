@@ -81,11 +81,14 @@ Pipeline order, each layer assuming the previous:
   - Coincident faces **within one block** are merged by compositing sprites
     (`TextureAtlas.combine`). Do not do this across different blocks: Minecraft draws
     them twice, and Blender dedupes them on import.
-  - Fluids are fallback cubes: water is tinted (`tintindex=0`), the surface sits at
-    `8/9` of the block (full height when the same fluid is directly above), and same-fluid
-    faces are culled explicitly (`_fluid_culls`) because fluids are translucent and `covers`
-    never culls them. `fluid_above` is part of the `state_mesh` cache key. The fluid inside
-    waterlogged blocks is not rendered.
+  - Fluids use four corner heights per block, like vanilla `FluidRenderer` (`getHeight` +
+    `calculateAverageHeight`): the top quad and the side tops slope and adjacent blocks share
+    their edge, so flowing water is a continuous ramp, not stairs. Water is tinted
+    (`tintindex=0`); an unfed source is `8/9` and each level drops `1/9`. Same-fluid faces are
+    culled explicitly in **every** direction (`_fluid_culls`) because fluids are translucent
+    and `covers` never culls them; continuity comes from the sloped surface, not internal
+    vertical walls. Fluid templates are cached by state plus the four rounded corner heights.
+    The fluid inside waterlogged blocks is not rendered.
   - `MeshBuilder.build()` calls `atlas.build()` and only then finalizes state UVs.
     Sprites are registered while building state templates; don't finalize before packing.
 - Atlas: power-of-two, shelf-packed, 2 px padding, alpha modes 0/1/2

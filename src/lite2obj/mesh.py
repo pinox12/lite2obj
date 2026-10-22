@@ -31,10 +31,11 @@ from typing import Any
 
 import numpy as np
 
-from .fallbacks import fluid_height
+from .fallbacks import FLUID_TEXTURES, fluid_height
 from .litematic import BlockState, Litematic
 from .models import (
     BLOCK_CENTER,
+    FACE_DIRECTIONS,
     Element,
     ModelResolver,
     Variant,
@@ -669,6 +670,7 @@ class MeshBuilder:
             tints=self.options.tint_colors or dict(DEFAULT_TINTS),
         )
         self._states: dict[tuple[str, tuple[tuple[str, int, int, bool], ...], bool], StateMesh] = {}
+        self._fluids: dict[tuple[str, tuple[float, ...]], StateMesh] = {}
         self._cushions: dict[tuple[str, int], StateMesh] = {}
 
     # -- plantillas -------------------------------------------------------- #
@@ -831,37 +833,135 @@ class MeshBuilder:
         above = voxels.get((position[0], position[1] + 1, position[2]))
         return self._fluid(above) == fluid
 
-    def _fluid_culls(
+    def _fluid_height_at(
         self,
-        block: BlockState,
-        neighbour: BlockState,
-        direction: str,
         voxels: dict[tuple[int, int, int], BlockState],
         position: tuple[int, int, int],
-        neighbour_pos: tuple[int, int, int],
-    ) -> bool:
-        """Descarta una cara de fluido contra otro bloque del mismo fluido.
+        fluid: str,
+    ) -> float:
+        """Altura normalizada de ``getHeight`` de vanilla en una posición.
 
-        El descarte normal sólo mira bloques opacos, y el agua es translúcida: sin esta
-        regla cada bloque dibuja sus seis caras y el interior de una masa de agua se ve
-        como una rejilla de paredes superpuestas. En los laterales sólo se descarta si el
-        vecino llega a nuestra altura (si es agua de un nivel inferior, la cara de arriba
-        sigue siendo visible).
+        Devuelve ``1`` si hay el mismo fluido apilado encima, su altura propia si el bloque
+        contiene el mismo fluido, ``0`` si es aire u otro fluido y ``-1`` si es un bloque
+        sólido. El ``-1`` es importante: una pared no debe rebajar la orilla del agua.
+        """
+        block = voxels.get(position)
+        if block is None:
+            return 0.0
+        other = self._fluid(block)
+        if other == fluid:
+            if self._fluid_above(voxels, position, fluid):
+                return 1.0
+            return fluid_height(_fluid_level(block)) / _MODEL_UNITS
+        return 0.0 if other is not None else -1.0
+
+    def _fluid_corner_heights(
+        self,
+        block: BlockState,
+        fluid: str,
+        position: tuple[int, int, int],
+        voxels: dict[tuple[int, int, int], BlockState],
+    ) -> tuple[float, float, float, float]:
+        """Alturas ``(NW, SW, SE, NE)`` de la superficie, como ``FluidRenderer``.
+
+        Minecraft no usa una altura por bloque: promedia la altura propia con las de los
+        vecinos y la diagonal de cada esquina. Las cuatro esquinas de bloques contiguos
+        acaban en el mismo punto, así que el agua que fluye forma una rampa continua en vez
+        de una escalera de un noveno por bloque.
+        """
+        own = self._fluid_height_at(voxels, position, fluid)
+        if own >= 1.0:
+            return (1.0, 1.0, 1.0, 1.0)
+
+        x, y, z = position
+        north = self._fluid_height_at(voxels, (x, y, z - 1), fluid)
+        south = self._fluid_height_at(voxels, (x, y, z + 1), fluid)
+        east = self._fluid_height_at(voxels, (x + 1, y, z), fluid)
+        west = self._fluid_height_at(voxels, (x - 1, y, z), fluid)
+
+        def corner(first: float, second: float, diagonal: tuple[int, int, int]) -> float:
+            if first >= 1.0 or second >= 1.0:
+                return 1.0
+            height = None
+            # La diagonal sólo interviene si al menos uno de los dos lados tiene fluido,
+            # exactamente igual que ``calculateAverageHeight``.
+            if first > 0.0 or second > 0.0:
+                height = self._fluid_height_at(voxels, diagonal, fluid)
+                if height >= 1.0:
+                    return 1.0
+            return _average_fluid_height(own, first, second, height)
+
+        return (
+            corner(north, west, (x - 1, y, z - 1)),
+            corner(south, west, (x - 1, y, z + 1)),
+            corner(south, east, (x + 1, y, z + 1)),
+            corner(north, east, (x + 1, y, z - 1)),
+        )
+
+    def _fluid_state_mesh(
+        self,
+        block: BlockState,
+        fluid: str,
+        position: tuple[int, int, int],
+        voxels: dict[tuple[int, int, int], BlockState],
+    ) -> StateMesh:
+        """Plantilla de fluido con la superficie inclinada por esquinas."""
+        heights = self._fluid_corner_heights(block, fluid, position, voxels)
+        key = (self.state_key(block), tuple(round(height, 6) for height in heights))
+        cached = self._fluids.get(key)
+        if cached is not None:
+            return cached
+
+        nw, sw, se, ne = heights
+        corners = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, ne, 0.0],
+                [0.0, nw, 0.0],
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, se, 1.0],
+                [0.0, sw, 1.0],
+            ],
+            dtype=np.float32,
+        )
+        texture = FLUID_TEXTURES.get(fluid, f"minecraft:block/{fluid}_still")
+        tintindex = 0 if fluid == "water" else None
+        sprite = self.atlas.add(texture, self.tints.tint_for(block.name, tintindex))
+        alpha_mode = self.atlas.alpha_mode(sprite)
+        templates: list[QuadTemplate] = []
+        for direction in FACE_DIRECTIONS:
+            positions = corners[list(FACE_CORNERS[direction])]
+            st = np.zeros((4, 2), dtype=np.float32)
+            for slot, corner in enumerate(FACE_UV_ORDER[direction]):
+                st[slot] = UV_CORNERS[corner]
+            templates.append(
+                QuadTemplate(
+                    positions=positions,
+                    normal=_winding_normal(positions),
+                    st=st,
+                    sprite=sprite,
+                    cullface=direction,
+                    alpha_mode=alpha_mode,
+                    tintindex=tintindex,
+                )
+            )
+
+        state = StateMesh(block=block, templates=tuple(templates), covers=False)
+        self._fluids[key] = state
+        return state
+
+    def _fluid_culls(self, block: BlockState, neighbour: BlockState) -> bool:
+        """Descarta cualquier cara entre dos bloques del mismo fluido.
+
+        El descarte normal sólo mira bloques opacos y el agua es translúcida. Si dos
+        bloques de agua comparten una cara, Minecraft no la dibuja en ninguna dirección:
+        la continuidad la da la superficie inclinada, no una pared vertical. Cualquier
+        resto de pared interna convierte la corriente en una escalera.
         """
         fluid = self._fluid(block)
-        if fluid is None or self._fluid(neighbour) != fluid:
-            return False
-        if direction in ("up", "down"):
-            return True
-        my_height = fluid_height(
-            _fluid_level(block),
-            fluid_above=self._fluid_above(voxels, position, fluid),
-        )
-        their_height = fluid_height(
-            _fluid_level(neighbour),
-            fluid_above=self._fluid_above(voxels, neighbour_pos, fluid),
-        )
-        return their_height >= my_height - 1e-6
+        return fluid is not None and self._fluid(neighbour) == fluid
 
     # -- construcción ------------------------------------------------------ #
 
@@ -896,8 +996,10 @@ class MeshBuilder:
                 block_index[key] = len(block_palette)
                 block_palette.append(block)
             fluid = self._fluid(block)
-            fluid_above = fluid is not None and self._fluid_above(voxels, position, fluid)
-            placed[position] = self.state_mesh(block, position, fluid_above=fluid_above)
+            if fluid is not None:
+                placed[position] = self._fluid_state_mesh(block, fluid, position, voxels)
+            else:
+                placed[position] = self.state_mesh(block, position)
 
         # Las entidades no ocupan la rejilla de bloques: se recogen aparte y se emiten al
         # final. ``Pos`` es relativo a la esquina 1 de la selección (``Position``), que no
@@ -969,14 +1071,7 @@ class MeshBuilder:
                         state.block, neighbour, template.cullface
                     ):
                         continue
-                    if neighbour is not None and self._fluid_culls(
-                        state.block,
-                        neighbour,
-                        template.cullface,
-                        voxels,
-                        position,
-                        neighbour_pos,
-                    ):
+                    if neighbour is not None and self._fluid_culls(state.block, neighbour):
                         continue
                 if limit and len(meta) >= limit:
                     partial = True
@@ -1055,6 +1150,36 @@ def _fluid_level(block: BlockState) -> int:
         return int(block.properties_dict().get("level", "0"))
     except ValueError:
         return 0
+
+
+def _average_fluid_height(
+    own: float,
+    first: float,
+    second: float,
+    diagonal: float | None = None,
+) -> float:
+    """Media ponderada de una esquina, como ``calculateAverageHeight`` de vanilla.
+
+    Las alturas a partir de ``0.8`` pesan diez veces más: así una fuente manda sobre el
+    borde seco y la superficie no se hunde de golpe. Las alturas negativas (paredes) y las
+    diagonales no consultadas se ignoran. ``diagonal`` vale ``None`` cuando ningún lado
+    tiene fluido; en ese caso Minecraft ni siquiera consulta la esquina diagonal.
+    """
+    if first >= 1.0 or second >= 1.0:
+        return 1.0
+    heights = (diagonal, own, first, second) if diagonal is not None else (own, first, second)
+    total = 0.0
+    weight = 0.0
+    for height in heights:
+        if height is None:
+            continue
+        if height >= 0.8:
+            total += height * 10.0
+            weight += 10.0
+        elif height >= 0.0:
+            total += height
+            weight += 1.0
+    return total / weight if weight else own
 
 
 def _is_bars(block: BlockState) -> bool:
