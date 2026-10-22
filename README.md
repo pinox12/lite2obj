@@ -118,6 +118,9 @@ Notas de fidelidad:
   Además se oculta la cara de unión entre vidrieras del mismo tipo, como hace
   `IronBarsBlock.skipRendering`: sin eso, cada bloque de un panel continuo dejaba una línea
   vertical con la textura `*_pane_top`.
+- **Tintes de bioma**: se usa el color de *plains* para césped, hojas y agua. La hojarasca
+  (`leaf_litter`) usa la colormap `dry_foliage`, así que sale marrón y no con el verde del
+  césped.
 - **Fluidos**: el agua se tiñe con el color por defecto (bioma *plains*), su superficie queda a
   `8/9` del bloque (o a `1` cuando hay más fluido encima) y las caras entre bloques del mismo
   fluido se descartan. Sin ese descarte, el agua translúcida dibujaba todas sus paredes

@@ -43,7 +43,7 @@ DEFAULT_TINTS: dict[str, tuple[int, int, int]] = {
     "grass": (0x91, 0xBD, 0x59),
     "foliage": (0x59, 0xAE, 0x30),
     "water": (0x3F, 0x76, 0xE4),
-    "dry_foliage": (0xA6, 0x6B, 0x37),
+    "dry_foliage": (0xA3, 0x75, 0x46),
 }
 
 #: Hojas cuyo color el juego fija (no dependen del bioma).
@@ -68,6 +68,9 @@ _FOLIAGE_BLOCKS = frozenset(
         "flowering_azalea",
     }
 )
+
+#: Bloques que usan la colormap ``dry_foliage`` en vez de césped o follaje.
+_DRY_FOLIAGE_BLOCKS = frozenset({"leaf_litter"})
 
 _WATER_HINTS = ("water",)
 
@@ -133,9 +136,11 @@ class TintResolver:
             return self.tints.get("water")
         if tintindex == 1:
             return self.tints.get("foliage")
-        # tintindex 0: césped o follaje según el bloque.
+        # tintindex 0: césped, follaje u hojarasca seca según el bloque.
         if any(hint in path for hint in _WATER_HINTS):
             return self.tints.get("water")
+        if path in _DRY_FOLIAGE_BLOCKS:
+            return self.tints.get("dry_foliage")
         if _is_foliage(path):
             return self.tints.get("foliage")
         return self.tints.get("grass")

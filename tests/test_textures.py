@@ -177,6 +177,13 @@ def test_tint_resolver_fixed_leaf_colors():
     assert resolver.tint_for("minecraft:birch_leaves", 0) == (0x80, 0xA7, 0x55)
 
 
+def test_tint_resolver_leaf_litter_uses_dry_foliage():
+    """La hojarasca usa la colormap ``dry_foliage``, no el verde del césped."""
+    resolver = TintResolver()
+    assert resolver.tint_for("minecraft:leaf_litter", 0) == DEFAULT_TINTS["dry_foliage"]
+    assert DEFAULT_TINTS["dry_foliage"] == (0xA3, 0x75, 0x46)
+
+
 def test_tint_resolver_can_be_disabled():
     resolver = TintResolver(enabled=False)
     assert resolver.tint_for("minecraft:grass_block", 0) is None
