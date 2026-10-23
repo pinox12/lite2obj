@@ -50,7 +50,9 @@ Pipeline order, each layer assuming the previous:
 - `models.py` resolves blockstates (variants/multipart), parent inheritance and model/
   element rotations. Variants are chosen **per position** (`position_seed`), not once per
   state. Each multipart group contributes **one** variant; emitting all weighted variants
-  overlaps them.
+  overlaps them. Variant `x`/`y` rotations use Minecraft's inverted signs (`rot_x`/`rot_y`),
+  but an element `rotation` follows the JOML right-hand rule (`rot_axis`). Mixing the two
+  folds the tripwire hook below its block.
 - `mesh.py` is the delicate part:
   - A `cullface` face is emitted unless the neighbour is a full opaque cube. `covers` is
     computed per element; `_is_full_cube` accepts 90°-multiple rotations but rejects

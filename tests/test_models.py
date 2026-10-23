@@ -26,6 +26,7 @@ from lite2obj.litematic import BlockState
 from lite2obj.models import (
     BLOCK_CENTER,
     BlockModelError,
+    ElementRotation,
     ModelResolver,
     default_uv,
     parse_condition,
@@ -85,6 +86,15 @@ def test_rot_x_matches_observer_convention():
 
 def test_rot_z_is_standard_right_handed():
     assert np.allclose(rot_z(90) @ np.array([1, 0, 0]), [0, 1, 0], atol=1e-9)
+
+
+def test_element_rotation_uses_joml_right_hand_rule():
+    # Los elementos no comparten la inversión de x/y de los variants: JOML gira con la
+    # mano derecha. Si se invierte, el gancho del tripwire queda por debajo del bloque.
+    x_rotation = ElementRotation(origin=(0.0, 0.0, 0.0), axis="x", angle=90.0)
+    y_rotation = ElementRotation(origin=(0.0, 0.0, 0.0), axis="y", angle=90.0)
+    assert np.allclose(x_rotation.matrix_for(np.zeros(3), np.ones(3)) @ [0, 1, 0], [0, 0, 1])
+    assert np.allclose(y_rotation.matrix_for(np.zeros(3), np.ones(3)) @ [1, 0, 0], [0, 0, -1])
 
 
 def test_variant_matrix_applies_x_then_y():
@@ -452,6 +462,24 @@ def test_real_jar_cube_and_stairs():
     # La parte alta de la escalera está en el lado este (x 8..16).
     upper = max(geometry, key=lambda item: item[0].to[1])
     assert upper[0].frm[0] == 8.0
+
+
+def test_real_jar_tripwire_hook_folds_up_inside_the_block():
+    """El gancho sin conectar se pliega hacia arriba, no hacia abajo del bloque."""
+    resolver = ModelResolver(jar_resources())
+    hook_state = BlockState(
+        "minecraft:tripwire_hook",
+        (("attached", "false"), ("facing", "north"), ("powered", "false")),
+    )
+    geometry = resolver.geometry(hook_state)
+    hook = max(
+        (element for element, _ in geometry if element.rotation is not None),
+        key=lambda element: np.prod(np.array(element.to) - np.array(element.frm)),
+    )
+    corners = hook.corners()
+    assert corners[:, 1].min() >= 0.0
+    assert corners[:, 1].max() <= 16.0
+    assert corners[:, 1].max() > 8.0
 
 
 def test_real_jar_end_rod_rotation_points_east():

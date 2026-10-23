@@ -90,11 +90,17 @@ def rot_z(degrees: float) -> np.ndarray:
 
 
 def rot_axis(axis: str, degrees: float) -> np.ndarray:
-    """Matriz de rotación para la ``rotation`` de un elemento."""
+    """Matriz de la ``rotation`` de un elemento (regla de la mano derecha).
+
+    A diferencia de las rotaciones de variant, que Minecraft invierte para ``x`` e ``y``
+    (ver :func:`rot_x` y :func:`rot_y`), la rotación de un elemento usa directamente la
+    matriz de JOML (``BlockElementRotation``). Por eso aquí se niega el ángulo al reutilizar
+    esas dos funciones.
+    """
     if axis == "x":
-        return rot_x(degrees)
+        return rot_x(-degrees)
     if axis == "y":
-        return rot_y(degrees)
+        return rot_y(-degrees)
     if axis == "z":
         return rot_z(degrees)
     raise BlockModelError(f"Eje de rotación inválido: {axis!r}")
