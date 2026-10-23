@@ -351,6 +351,11 @@ def is_banner_block(block: BlockState | None) -> bool:
     return block is not None and _is_banner_path(block.path)
 
 
+def is_bell_block(block: BlockState | None) -> bool:
+    """Cierto si el bloque es una campana colocada."""
+    return block is not None and block.path == "bell"
+
+
 def _entity_id(entity: dict[str, Any]) -> str:
     return _path(str(entity.get("id", "")))
 

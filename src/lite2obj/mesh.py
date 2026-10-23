@@ -1187,6 +1187,7 @@ class MeshBuilder:
                 EntityPlacement,
                 EntityRenderer,
                 is_banner_block,
+                is_bell_block,
                 is_skull_block,
             )
 
@@ -1197,6 +1198,7 @@ class MeshBuilder:
                 mobs=options.mobs,
             )
             replaced: set[tuple[int, int, int]] = set()
+            handled: set[tuple[int, int, int]] = set()
             for region in doc.regions:
                 ox, oy, oz = region.origin
                 for tile in region.tile_entities:
@@ -1209,19 +1211,23 @@ class MeshBuilder:
                     if placement is None:
                         continue
                     entity_placements.append(placement)
+                    handled.add(position)
                     if placement.replace_block:
                         replaced.add(position)
-            # Algunas *block entities* no necesitan NBT para su geometría: la calavera y el
-            # estandarte tienen tipo, color y rotación en el blockstate. Si el `.litematic`
-            # no guarda ``TileEntities``, se reconstruyen desde ahí. En el estandarte se
-            # pinta sólo el color base; los patrones quedan para más adelante.
+            # Algunas *block entities* no necesitan NBT para su geometría: la calavera, el
+            # estandarte y la campana tienen tipo, color, rotación o soporte en el blockstate.
+            # Si el `.litematic` no guarda ``TileEntities``, se reconstruyen desde ahí. En el
+            # estandarte se pinta sólo el color base; los patrones quedan para más adelante.
             for position, block in voxels.items():
-                if position in replaced or not (is_skull_block(block) or is_banner_block(block)):
+                if position in handled or not (
+                    is_skull_block(block) or is_banner_block(block) or is_bell_block(block)
+                ):
                     continue
                 placement = renderer.tile_entity({}, block, position)
                 if placement is None:
                     continue
                 entity_placements.append(placement)
+                handled.add(position)
                 if placement.replace_block:
                     replaced.add(position)
             for region in doc.regions:

@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 291 tests |
+| F8 | Tests | ✅ 296 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -124,7 +124,8 @@ Notas de fidelidad:
   vertical con la textura `*_pane_top`.
 - **Tintes de bioma**: se usa el color de *plains* para césped, hojas y agua. La hojarasca
   (`leaf_litter`) usa la colormap `dry_foliage`, así que sale marrón y no con el verde del
-  césped.
+  césped. Un bloque con `tintindex` pero sin color de bloque registrado (la sierra del
+  cortapiedras, el bambú, un caldero de lava...) se deja sin teñir, como vanilla.
 - **Fluidos**: el agua se tiñe con el color por defecto (bioma *plains*) y las caras entre
   bloques del mismo fluido se descartan. Sin ese descarte, el agua translúcida dibujaba todas
   sus paredes internas y se veía como una rejilla casi opaca. La superficie no es plana por
@@ -158,9 +159,10 @@ Notas de fidelidad:
   la casilla *Dibujar entidades*) deja sólo los bloques y sigue apagando también las
   criaturas. Las calaveras y cabezas se reconstruyen desde su blockstate cuando el
   `.litematic` no trae `TileEntities`; el modelo `block/skull` no tiene geometría y sin
-  esto se veía el cubo de respaldo con la textura de partículas. Los estandartes también
-  se reconstruyen desde el blockstate: de momento sólo se pinta su color base y los
-  patrones se ignoran.
+  esto se veía el cubo de respaldo con la textura de partículas. Los estandartes y la
+  campana también se reconstruyen desde el blockstate: en el estandarte, de momento sólo
+  se pinta su color base y los patrones se ignoran; la campana recupera así su cuerpo,
+  que no está en el modelo de bloque.
   Limitaciones: no se dibujan armaduras ni equipación, los patrones de estandarte quedan
   para más adelante y los modelos de objeto con renderer especial (`special`) se omiten.
   Los cuadros usan el `variant` del NBT y caen a `kebab` si falta.

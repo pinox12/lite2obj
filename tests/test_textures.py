@@ -171,6 +171,25 @@ def test_tint_resolver_default_colors():
     assert resolver.tint_for("minecraft:stone", None) is None
 
 
+def test_tint_resolver_unknown_tintindex_zero_is_untinted():
+    """Sin color de bloque registrado, vanilla deja la textura sin teñir."""
+    resolver = TintResolver()
+    assert resolver.tint_for("minecraft:stonecutter", 0) is None
+    assert resolver.tint_for("minecraft:bamboo", 0) is None
+    assert resolver.tint_for("minecraft:lava_cauldron", 0) is None
+
+
+def test_tint_resolver_grass_stems_and_flowerbeds():
+    resolver = TintResolver()
+    assert resolver.tint_for("minecraft:short_grass", 0) == DEFAULT_TINTS["grass"]
+    assert resolver.tint_for("minecraft:sugar_cane", 0) == DEFAULT_TINTS["grass"]
+    assert resolver.tint_for("minecraft:melon_stem", 0) == DEFAULT_TINTS["grass"]
+    assert resolver.tint_for("minecraft:attached_melon_stem", 0) == (0xE0, 0xC7, 0x1C)
+    assert resolver.tint_for("minecraft:redstone_wire", 0) == (0xFF, 0x33, 0x00)
+    # El tallo de un lecho de flores usa ``tintindex == 1`` y la colormap de césped.
+    assert resolver.tint_for("minecraft:pink_petals", 1) == DEFAULT_TINTS["grass"]
+
+
 def test_tint_resolver_fixed_leaf_colors():
     resolver = TintResolver()
     assert resolver.tint_for("minecraft:spruce_leaves", 0) == (0x61, 0x99, 0x61)

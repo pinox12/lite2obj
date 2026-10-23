@@ -50,7 +50,32 @@ DEFAULT_TINTS: dict[str, tuple[int, int, int]] = {
 FIXED_BLOCK_TINTS: dict[str, tuple[int, int, int]] = {
     "minecraft:spruce_leaves": (0x61, 0x99, 0x61),
     "minecraft:birch_leaves": (0x80, 0xA7, 0x55),
+    # Los tallos ya prendidos a la fruta usan un verde fijo en vanilla.
+    "minecraft:attached_melon_stem": (0xE0, 0xC7, 0x1C),
+    "minecraft:attached_pumpkin_stem": (0xE0, 0xC7, 0x1C),
+    # El polvo de redstone se tiñe según la potencia; sin estado usamos el rojo máximo.
+    "minecraft:redstone_wire": (0xFF, 0x33, 0x00),
 }
+
+#: Bloques en los que ``tintindex == 0`` usa la colormap de césped.
+_GRASS_TINT_BLOCKS = frozenset(
+    {
+        "grass_block",
+        "fern",
+        "short_grass",
+        "potted_fern",
+        "bush",
+        "large_fern",
+        "tall_grass",
+        "sugar_cane",
+    }
+)
+
+#: Tallos que crecen: en vanilla el verde depende de la edad; sin estado usamos césped.
+_STEM_TINT_BLOCKS = frozenset({"melon_stem", "pumpkin_stem"})
+
+#: Lechos de flores: el tallo usa ``tintindex == 1`` con la colormap de césped.
+_FLOWERBED_BLOCKS = frozenset({"pink_petals", "wildflowers"})
 
 #: Bloques en los que ``tintindex == 0`` es follaje en vez de césped.
 _FOLIAGE_BLOCKS = frozenset(
@@ -135,15 +160,21 @@ class TintResolver:
         if tintindex == 2:
             return self.tints.get("water")
         if tintindex == 1:
+            if path in _FLOWERBED_BLOCKS:
+                return self.tints.get("grass")
             return self.tints.get("foliage")
-        # tintindex 0: césped, follaje u hojarasca seca según el bloque.
+        # tintindex 0: césped, follaje u hojarasca seca según el bloque. Un bloque sin
+        # color registrado (la sierra del cortapiedras, el bambú, un caldero de lava...)
+        # no se tiñe: vanilla devuelve -1 y deja la textura tal cual.
         if any(hint in path for hint in _WATER_HINTS):
             return self.tints.get("water")
         if path in _DRY_FOLIAGE_BLOCKS:
             return self.tints.get("dry_foliage")
+        if path in _GRASS_TINT_BLOCKS or path in _STEM_TINT_BLOCKS:
+            return self.tints.get("grass")
         if _is_foliage(path):
             return self.tints.get("foliage")
-        return self.tints.get("grass")
+        return None
 
 
 class TextureAtlas:

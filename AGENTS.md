@@ -110,7 +110,14 @@ Pipeline order, each layer assuming the previous:
     `block/skull` has no elements, so otherwise the fallback cube uses the particle texture.
     `_is_skull_path` must keep excluding `piston_head`. Banners get the same blockstate
     fallback (standing `rotation`, wall `facing`); only the base dye colour is tinted for
-    now, patterns are intentionally ignored.
+    now, patterns are intentionally ignored. Bells also get the fallback: their body lives
+    in `entity/bell/bell_body`, not in `block/bell_*`, so without it only the wooden
+    support appears. The bell entity model is not blockstate-dependent; the block model
+    supplies the support.
+  - `TintResolver.tint_for()` only tints blocks with a registered colour: grass, foliage,
+    water, dry foliage and the fixed leaf/stem/redstone colours. An unknown `tintindex=0`
+    (stonecutter saw, bamboo, lava cauldron...) returns `None`; defaulting it to grass
+    painted those textures green.
   - `MeshBuilder.build()` calls `atlas.build()` and only then finalizes state UVs.
     Sprites are registered while building state templates; don't finalize before packing.
 - Atlas: power-of-two, shelf-packed, 2 px padding, alpha modes 0/1/2

@@ -12,7 +12,7 @@ sin navegador.
 ## Estado (v1 funcional de punta a punta)
 
 F1–F8 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
-texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 291
+texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 296
 tests, `ruff` y `mypy` limpios.
 
 | Fase | Estado | Nota |
@@ -24,7 +24,7 @@ tests, `ruff` y `mypy` limpios.
 | F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
 | F6 CLI | ✅ | `info`, `list`, `export` |
 | F7 App de escritorio | ✅ | PySide6 + OpenGL de Qt; órbita, capas, wireframe, captura y export desde la UI |
-| F8 Tests | ✅ | 291 tests; golden de conteos, `uvlock` documentado |
+| F8 Tests | ✅ | 296 tests; golden de conteos, `uvlock` documentado |
 
 Módulos reales (los nombres del plan cambiaron al implementar):
 
@@ -76,7 +76,9 @@ Desviaciones respecto al plan:
   (`mobs`, desactivado por defecto) y se separan del resto de entidades en
   `EntityRenderer.entity()`.
 - **Tintes**: se aplican multiplicando la textura (sprites teñidos dentro del atlas), en vez
-  de colores por vértice, para que el color viaje en el OBJ sin nada extra.
+  de colores por vértice, para que el color viaje en el OBJ sin nada extra. Sólo se tiñen
+  los bloques con color de bloque registrado; un `tintindex` suelto (la sierra del
+  cortapiedras, por ejemplo) deja la textura tal cual, como vanilla.
 
 Culling medido (caras sin descartar → con descarte):
 
@@ -225,7 +227,8 @@ Notas:
 - Carga PNG (incl. modo paleta `P`), animacion -> primer frame, incluye
   `textures/entity/*` (cofres, carteles).
 - Atlas con packer propio + mapeo UV (0-16 -> coords de atlas).
-- Tint fijo vanilla por `tintindex` (grass/foliage/water), conmutable.
+- Tint fijo vanilla por `tintindex` (grass/foliage/water); sin color registrado no se
+  tiñe. Conmutable.
 - **DoD**: atlas con <5% de texturas en `missingno`; UVs sin costuras entre bloques.
 
 ### F4 · Malla y culling

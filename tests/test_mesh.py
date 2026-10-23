@@ -594,6 +594,7 @@ def entity_setup(**options) -> MeshBuilder:
         blockstate_path("minecraft:light_blue_wall_banner"): {
             "variants": {"": {"model": "test:block/empty"}}
         },
+        blockstate_path("minecraft:bell"): {"variants": {"": {"model": "test:block/empty"}}},
         blockstate_path("minecraft:white_shulker_box"): {
             "variants": {"": {"model": "test:block/empty"}}
         },
@@ -634,6 +635,7 @@ def entity_setup(**options) -> MeshBuilder:
         texture_path("minecraft:entity/armorstand/armorstand"): make_png(),
         texture_path("minecraft:entity/banner/banner_base"): make_png(),
         texture_path("minecraft:entity/banner/base"): make_png(),
+        texture_path("minecraft:entity/bell/bell_body"): make_png(),
         texture_path("minecraft:entity/shulker/shulker"): make_png(),
         texture_path("minecraft:entity/shulker/shulker_white"): make_png(),
         texture_path("minecraft:entity/skeleton/skeleton"): make_png(),
@@ -829,6 +831,38 @@ def test_wall_banner_without_tile_entity_uses_blockstate_color():
     assert tint is not None
     assert _sprites_of(mesh, tint).sum() > 0
     assert mesh.quad_count == 12
+
+
+def test_bell_without_tile_entity_uses_the_entity_model():
+    builder = entity_setup()
+    bell = BlockState(
+        "minecraft:bell",
+        (("attachment", "floor"), ("facing", "north"), ("powered", "false")),
+    )
+    region = _region([AIR, bell], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    sprite = mesh.atlas.sprite("minecraft:entity/bell/bell_body")
+    assert sprite is not None
+    assert _sprites_of(mesh, sprite).sum() > 0
+    # La campana ocupa el centro del bloque; el cubo de respaldo llegaría a 0 y 1.
+    assert mesh.positions.min() > 0.1
+    assert mesh.positions.max() < 0.9
+
+
+def test_bell_with_tile_entity_is_not_duplicated():
+    builder = entity_setup()
+    bell = BlockState(
+        "minecraft:bell",
+        (("attachment", "floor"), ("facing", "north"), ("powered", "false")),
+    )
+    region = _region([AIR, bell], [1], (1, 1, 1))
+    region.tile_entities = [{"id": "minecraft:bell", "x": 0, "y": 0, "z": 0}]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    sprite = mesh.atlas.sprite("minecraft:entity/bell/bell_body")
+    assert sprite is not None
+    assert _sprites_of(mesh, sprite).sum() == 12
 
 
 def test_banner_parses_two_word_colors_and_tints_the_flag():
@@ -1979,6 +2013,47 @@ def test_variants_are_picked_per_position():
     # Y la elección es estable: reconstruir da exactamente la misma malla.
     again = make_setup(entries).build(doc)
     assert np.array_equal(mesh.positions, again.positions)
+
+
+def test_stonecutter_saw_has_no_tint():
+    """La sierra del cortapiedras lleva ``tintindex: 0`` pero no tiene color de bloque."""
+    builder = make_setup(
+        {
+            blockstate_path("minecraft:stonecutter"): {
+                "variants": {"facing=north": {"model": "test:block/stonecutter"}}
+            },
+            model_path("test:block/stonecutter"): {
+                "textures": {"saw": "minecraft:block/stonecutter_saw"},
+                "elements": [
+                    {
+                        "from": [1, 9, 8],
+                        "to": [15, 16, 8],
+                        "faces": {
+                            "north": {
+                                "uv": [1, 9, 15, 16],
+                                "texture": "#saw",
+                                "tintindex": 0,
+                            },
+                            "south": {
+                                "uv": [15, 9, 1, 16],
+                                "texture": "#saw",
+                                "tintindex": 0,
+                            },
+                        },
+                    }
+                ],
+            },
+            texture_path("minecraft:block/stonecutter_saw"): make_png(),
+        }
+    )
+    state = BlockState("minecraft:stonecutter", (("facing", "north"),))
+    region = _region([AIR, state], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    plain = mesh.atlas.sprite("minecraft:block/stonecutter_saw")
+    assert plain is not None
+    assert _sprites_of(mesh, plain).sum() == mesh.quad_count
+    assert mesh.atlas.sprite("minecraft:block/stonecutter_saw", (0x91, 0xBD, 0x59)) is None
 
 
 def test_position_seed_changes_between_neighbours():
