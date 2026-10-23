@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 296 tests |
+| F8 | Tests | ✅ 299 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -111,6 +111,10 @@ Notas de fidelidad:
 - **UV del modelo**: se respeta el `uv` explícito de cada cara (y el derivado de la caja si
   falta), como Minecraft. Es lo que hace que macetas, faroles, vallas y plantas —varias piezas
   dibujadas en un mismo PNG— no estiren la textura entera en cada cara.
+- **Texturas animadas**: se recortan al primer fotograma sólo si su `.mcmeta` declara una
+  animación, usando el tamaño de fotograma indicado (`width`/`height`). No se adivina por la
+  forma: una textura alta que no anima (la bruja o el strider, `64x128`) conserva toda su
+  altura y sus UV no se desplazan.
 - **Cristal**: dos bloques del mismo cristal no dibujan la cara común
   (`AbstractGlassBlock.skipRendering`), aunque el cristal no sea un cubo opaco. Así una pared
   de cristal no enseña la retícula de caras internas que Minecraft oculta; dos cristales

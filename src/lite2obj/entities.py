@@ -101,33 +101,9 @@ _MINECART_CONTENTS: dict[str, str] = {
 _MINECART_OFFSETS: dict[str, int] = {"chest_minecart": 8, "hopper_minecart": 1}
 
 
-#: Modelos humanoides que el cliente reduce a ``0.9375``.
-_HUMANOID = frozenset(
-    {
-        "player",
-        "player_slim",
-        "zombie",
-        "husk",
-        "drowned",
-        "skeleton",
-        "stray",
-        "bogged",
-        "parched",
-        "wither_skeleton",
-        "piglin",
-        "piglin_brute",
-        "zombified_piglin",
-        "villager",
-        "zombie_villager",
-        "wandering_trader",
-        "witch",
-        "evoker",
-        "vindicator",
-        "pillager",
-        "illusioner",
-        "giant",
-    }
-)
+#: Modelos cuyo renderer aplica la escala ``0.9375``. En 26.3 sólo el avatar lo hace;
+#: las criaturas ya llevan su escala en la raíz del modelo o se dibujan a tamaño completo.
+_HUMANOID = frozenset({"player", "player_slim"})
 
 #: Entidades cuyo identificador no coincide con el nombre de su capa de modelo.
 _ENTITY_LAYERS: dict[str, str] = {
@@ -169,7 +145,7 @@ _ENTITY_LAYERS: dict[str, str] = {
     "mushroom_cow": "mooshroom",
 }
 
-#: Criaturas con caja humana: se escalan a ``0.9375`` como hace vanilla.
+#: Criaturas a las que hay que aplicar la escala del renderer (no la de la raíz).
 _LAYER_HUMANOID = _HUMANOID
 
 #: Colores/nombres de variantes que usan el sufijo de la textura.
@@ -1178,7 +1154,8 @@ class EntityRenderer:
         if not layers:
             return []
 
-        # La escala 0.9375 es la de los modelos humanoides; el resto se dibuja a 1.
+        # Sólo el renderer del avatar aplica 0.9375; las criaturas ya traen su escala
+        # en la raíz del modelo (villager, witch, husk...) o se dibujan a 1.
         scale = 0.9375 if base in _LAYER_HUMANOID else 1.0
         matrix = self._living_matrix(_entity_yaw(entity), scale)
         label = BlockState(f"minecraft:{kind}")

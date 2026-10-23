@@ -27,6 +27,12 @@ def make_png(width: int, height: int, color=(255, 0, 0, 255), *, alpha_variation
     return buffer.getvalue()
 
 
+def make_mcmeta(**animation: int) -> bytes:
+    import json
+
+    return json.dumps({"animation": animation}).encode()
+
+
 def make_atlas(entries: dict[str, bytes], **kwargs) -> TextureAtlas:
     manager = ResourceManager([MemorySource(entries)])
     return TextureAtlas(manager, **kwargs)
@@ -88,10 +94,46 @@ def test_normalized_uv_is_within_unit_square():
 
 
 def test_animated_texture_is_cropped_to_first_frame():
-    atlas = make_atlas({texture_path("test:block/anim"): make_png(16, 64)})
+    texture = texture_path("test:block/anim")
+    atlas = make_atlas({texture: make_png(16, 64), f"{texture}.mcmeta": make_mcmeta(frametime=2)})
     sprite = atlas.add("test:block/anim")
     assert sprite is not None
     assert sprite.width == 16 and sprite.height == 16
+
+
+def test_tall_texture_without_animation_is_not_cropped():
+    """Una textura ``64x128`` normal (la bruja) conserva toda su altura."""
+    texture = texture_path("test:entity/witch")
+    atlas = make_atlas({texture: make_png(64, 128)})
+    sprite = atlas.add("test:entity/witch")
+    assert sprite is not None
+    assert (sprite.width, sprite.height) == (64, 128)
+
+
+def test_animation_metadata_without_animation_key_is_not_cropped():
+    texture = texture_path("test:entity/villager")
+    atlas = make_atlas(
+        {
+            texture: make_png(64, 128),
+            f"{texture}.mcmeta": b'{"villager": {"hat": "full"}}',
+        }
+    )
+    sprite = atlas.add("test:entity/villager")
+    assert sprite is not None
+    assert (sprite.width, sprite.height) == (64, 128)
+
+
+def test_animated_texture_uses_declared_frame_size():
+    texture = texture_path("test:entity/conduit")
+    atlas = make_atlas(
+        {
+            texture: make_png(64, 704),
+            f"{texture}.mcmeta": make_mcmeta(frametime=3, height=32),
+        }
+    )
+    sprite = atlas.add("test:entity/conduit")
+    assert sprite is not None
+    assert (sprite.width, sprite.height) == (64, 32)
 
 
 def test_tinted_and_untinted_are_separate_sprites():

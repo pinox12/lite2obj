@@ -13,7 +13,7 @@ Minecraft no guarda la textura teñida, sino que multiplica la textura por un co
 bioma, se usan los colores por defecto del bioma "plains" y se generan **sprites teñidos**
 dentro del atlas. Así el color viaja en la propia textura y el OBJ no necesita nada extra.
 
-Las texturas animadas (tiras verticales) se recortan al primer fotograma.
+Las texturas animadas se recortan al primer fotograma según su ``.mcmeta``.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 from PIL import Image
+
+from .assets import texture_path
 
 if TYPE_CHECKING:  # pragma: no cover
     from .assets import ResourceManager
@@ -213,7 +215,7 @@ class TextureAtlas:
             if image is None:
                 self.missing.add(texture)
             else:
-                image = self._prepare(image)
+                image = self._prepare(image, texture)
                 if tint is not None:
                     image = _apply_tint(image, tint)
                 sprite = self._register(key, texture, image)
@@ -284,16 +286,37 @@ class TextureAtlas:
             return False
         return self._opaque.get(sprite.index, False)
 
-    def _prepare(self, image: Image.Image) -> Image.Image:
-        """Recorta el primer fotograma de las texturas animadas y escala si se pidió."""
-        width, height = image.size
-        if height > width and height % width == 0:
-            image = image.crop((0, 0, width, width))
+    def _prepare(self, image: Image.Image, texture: str) -> Image.Image:
+        """Recorta el primer fotograma de las texturas animadas y escala si se pidió.
+
+        La animación se detecta por el ``.mcmeta`` de la textura, no por su forma: hay
+        texturas altas que no son tiras de fotogramas (la bruja, por ejemplo, es
+        ``64x128`` y su túnica vive por debajo del primer cuadrado).
+        """
+        image = self._first_frame(image, texture)
         if self.scale != 1:
             image = image.resize(
                 (image.width * self.scale, image.height * self.scale), Image.Resampling.NEAREST
             )
         return image.convert("RGBA")
+
+    def _first_frame(self, image: Image.Image, texture: str) -> Image.Image:
+        metadata = self.resources.read_json(f"{texture_path(texture)}.mcmeta")
+        if metadata is None:
+            return image
+        animation = metadata.get("animation")
+        if not isinstance(animation, dict):
+            return image
+        try:
+            frame_width = int(animation.get("width", image.width))
+            frame_height = int(animation.get("height", frame_width))
+        except TypeError, ValueError:
+            return image
+        frame_width = min(max(frame_width, 1), image.width)
+        frame_height = min(max(frame_height, 1), image.height)
+        if (frame_width, frame_height) == image.size:
+            return image
+        return image.crop((0, 0, frame_width, frame_height))
 
     def build(
         self, images: Iterable[tuple[str | None, tuple[int, int, int] | None]] = ()
