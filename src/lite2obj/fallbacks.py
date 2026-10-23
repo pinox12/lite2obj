@@ -24,12 +24,26 @@ from dataclasses import dataclass
 
 from .models import FACE_DIRECTIONS, Element, ElementFace
 
-__all__ = ["FallbackResolver", "fluid_cube", "fluid_height", "full_cube"]
+__all__ = [
+    "FLUID_FLOW_TEXTURES",
+    "FLUID_TEXTURES",
+    "FallbackResolver",
+    "fluid_cube",
+    "fluid_height",
+    "full_cube",
+]
 
-#: Textura de cada fluido.
+#: Textura de la superficie quieta de cada fluido.
 FLUID_TEXTURES: dict[str, str] = {
     "water": "minecraft:block/water_still",
     "lava": "minecraft:block/lava_still",
+}
+
+#: Textura de las caras laterales y de la superficie en movimiento. En vanilla las caras
+#: laterales usan siempre la textura de flujo, incluso en una fuente quieta.
+FLUID_FLOW_TEXTURES: dict[str, str] = {
+    "water": "minecraft:block/water_flow",
+    "lava": "minecraft:block/lava_flow",
 }
 
 #: Bloques que se consideran fluidos aunque el nombre lleve prefijo.

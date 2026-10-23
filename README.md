@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 274 tests |
+| F8 | Tests | ✅ 277 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -134,12 +134,12 @@ Notas de fidelidad:
   encima el bloque se llena hasta `1`. Los bloques *waterlogged* (losas, escaleras, vallas,
   plantas…) conservan su geometría y además dibujan el agua que contienen; sus caras de
   fluido se marcan aparte para que el descarte entre fluidos no borre el canto del bloque.
-  La superficie y el fondo se desplazan `0.001`, como `FluidRenderer`. Las caras laterales se
-  meten `0.02` hacia dentro en vez de `0.001`: en esquemas grandes la precisión del búfer de
-  profundidad de Blender/OpenGL no distingue un margen tan pequeño y el agua se solapa con el
-  cristal contiguo (una cara se parte en triángulos con una textura y otra). `0.02` es 1/50
-  de bloque, invisible, pero deja el agua claramente detrás del cristal y de la losa que la
-  aloja.
+  Las caras laterales usan siempre la textura de flujo (`water_flow`/`lava_flow`), como
+  vanilla, con la V recorriendo la altura de la caída: así una cascada muestra rayas
+  verticales y no la textura quieta. La superficie usa `water_still`/`lava_still` cuando no
+  hay corriente y la textura de flujo girada hacia la dirección de la corriente cuando la hay.
+  La superficie y el fondo se desplazan `0.001`, como `FluidRenderer`; las caras laterales se
+  meten `0.001` hacia dentro por el mismo motivo.
 - **Entidades y *block entities***: además de la rejilla se dibujan los cofres (simples,
   dobles, atrapados, de ender y de cobre), estandartes, cajas de shulker, macetas decoradas,
   calaveras, conductos, campanas, marcos de objeto (con su objeto y su giro), cuadros,

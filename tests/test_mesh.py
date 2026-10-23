@@ -1094,6 +1094,7 @@ def fluid_setup() -> MeshBuilder:
             },
             model_path("minecraft:block/water"): {},
             texture_path("minecraft:block/water_still"): make_png(color=(174, 174, 174, 180)),
+            texture_path("minecraft:block/water_flow"): make_png(color=(174, 174, 174, 180)),
             blockstate_path("test:solid"): {"variants": {"": {"model": "test:block/solid"}}},
             model_path("test:block/solid"): _model("minecraft:block/solid"),
             texture_path("minecraft:block/solid"): make_png(),
@@ -1133,6 +1134,66 @@ def test_water_is_tinted_translucent_and_smooths_its_surface():
     pixel = builder.atlas.image.crop(sprite.box).getpixel((0, 0))
     assert pixel[:3] == (174 * 0x3F // 255, 174 * 0x76 // 255, 174 * 0xE4 // 255)
     assert pixel[3] == 180
+
+
+def test_water_sides_use_the_flow_texture_with_vertical_uvs():
+    """El agua usa ``water_flow`` en los laterales y la V recorre la altura de la caída."""
+    builder = fluid_setup()
+    falling = BlockState("minecraft:water", (("level", "8"),))
+    region = _region([AIR, WATER, falling], [1, 2], (1, 2, 1))
+    mesh = builder.build(_doc([region], (1, 2, 1)))
+
+    water_tint = (0x3F, 0x76, 0xE4)
+    still = mesh.atlas.sprite("minecraft:block/water_still", water_tint)
+    flow = mesh.atlas.sprite("minecraft:block/water_flow", water_tint)
+    assert still is not None
+    assert flow is not None
+
+    normals = mesh.normals[mesh.quads[:, 0]]
+    sides = np.where(np.abs(normals[:, 1]) < 0.5)[0]
+    assert len(sides) == 8
+    assert np.all(mesh.sprite[sides] == flow.index)
+
+    width, height = mesh.atlas.size
+    for index in sides:
+        quad = mesh.quads[index]
+        uvs = mesh.uvs[quad]
+        # Pasar de UV de atlas a UV dentro del sprite de flujo.
+        u = (uvs[:, 0] - flow.x / width) / (flow.width / width)
+        v = (uvs[:, 1] - flow.y / height) / (flow.height / height)
+        assert u.min() >= -1e-6
+        assert u.max() <= 0.5 + 1e-6
+        # La textura de flujo es vertical: arriba se muestrea antes (V menor) que abajo.
+        ys = mesh.positions[quad][:, 1]
+        top = ys > (ys.min() + ys.max()) * 0.5
+        assert v[top].mean() < v[~top].mean()
+        assert v[top].max() <= 0.5 + 1e-6
+        assert v[~top].min() >= 0.5 - 1e-6
+
+    # La superficie del bloque que cae también usa flujo; el fondo sigue quieto.
+    top = int(np.where(normals[:, 1] > 0.5)[0][0])
+    bottom = int(np.where(normals[:, 1] < -0.5)[0][0])
+    assert mesh.sprite[top] == flow.index
+    assert mesh.sprite[bottom] == still.index
+
+
+def test_still_water_keeps_the_still_surface_and_flowing_sides():
+    """Una fuente quieta usa ``water_still`` arriba y ``water_flow`` en los laterales."""
+    builder = fluid_setup()
+    region = _region([AIR, WATER], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    water_tint = (0x3F, 0x76, 0xE4)
+    still = mesh.atlas.sprite("minecraft:block/water_still", water_tint)
+    flow = mesh.atlas.sprite("minecraft:block/water_flow", water_tint)
+    assert still is not None
+    assert flow is not None
+    normals = mesh.normals[mesh.quads[:, 0]]
+    top = int(np.where(normals[:, 1] > 0.5)[0][0])
+    assert mesh.sprite[top] == still.index
+    sides = np.where(np.abs(normals[:, 1]) < 0.5)[0]
+    assert len(sides) == 4
+    assert np.all(mesh.sprite[sides] == flow.index)
 
 
 def test_water_culls_faces_between_water_blocks():

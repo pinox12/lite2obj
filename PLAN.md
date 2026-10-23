@@ -12,7 +12,7 @@ sin navegador.
 ## Estado (v1 funcional de punta a punta)
 
 F1–F8 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
-texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 274
+texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 277
 tests, `ruff` y `mypy` limpios.
 
 | Fase | Estado | Nota |
@@ -24,7 +24,7 @@ tests, `ruff` y `mypy` limpios.
 | F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
 | F6 CLI | ✅ | `info`, `list`, `export` |
 | F7 App de escritorio | ✅ | PySide6 + OpenGL de Qt; órbita, capas, wireframe, captura y export desde la UI |
-| F8 Tests | ✅ | 274 tests; golden de conteos, `uvlock` documentado |
+| F8 Tests | ✅ | 277 tests; golden de conteos, `uvlock` documentado |
 
 Módulos reales (los nombres del plan cambiaron al implementar):
 

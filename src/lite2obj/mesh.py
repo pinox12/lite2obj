@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from .fallbacks import FLUID_TEXTURES, fluid_height
+from .fallbacks import FLUID_FLOW_TEXTURES, FLUID_TEXTURES, fluid_height
 from .litematic import BlockState, Litematic
 from .models import (
     BLOCK_CENTER,
@@ -681,7 +681,9 @@ class MeshBuilder:
             tints=self.options.tint_colors or dict(DEFAULT_TINTS),
         )
         self._states: dict[tuple[str, tuple[tuple[str, int, int, bool], ...], bool], StateMesh] = {}
-        self._fluids: dict[tuple[str, tuple[float, ...], float], StateMesh] = {}
+        self._fluids: dict[
+            tuple[str, str, tuple[float, ...], float, float, tuple[float, ...]], StateMesh
+        ] = {}
         self._waterlogged: dict[tuple[int, int], StateMesh] = {}
         self._cushions: dict[tuple[str, int], StateMesh] = {}
 
@@ -918,6 +920,69 @@ class MeshBuilder:
             corner(north, east, (x + 1, y, z - 1)),
         )
 
+    def _fluid_own_height_at(
+        self,
+        voxels: dict[tuple[int, int, int], BlockState],
+        position: tuple[int, int, int],
+        fluid: str,
+    ) -> float:
+        """Altura propia del fluido en una posición (``0`` si no hay ese fluido).
+
+        Es el ``getOwnHeight`` de vanilla: sólo mira el estado del bloque, no si encima
+        continúa la columna. Se usa para calcular la dirección de la corriente.
+        """
+        block = voxels.get(position)
+        if block is None or self._fluid(block) != fluid:
+            return 0.0
+        return fluid_height(_fluid_level(block)) / _MODEL_UNITS
+
+    def _fluid_flow(
+        self,
+        block: BlockState,
+        fluid: str,
+        position: tuple[int, int, int],
+        voxels: dict[tuple[int, int, int], BlockState],
+    ) -> tuple[float, float]:
+        """Dirección horizontal de la corriente, como ``FlowingFluid.getFlow``.
+
+        La superficie de un fluido en movimiento no usa la textura quieta: se dibuja con
+        la textura de flujo girada hacia donde baja el agua. Para una cara horizontal
+        sólo importa el componente XZ, así que se descarta el componente vertical que
+        vanilla añade en las caídas.
+        """
+        own = self._fluid_own_height_at(voxels, position, fluid)
+        flow_x = 0.0
+        flow_z = 0.0
+        for direction in ("north", "south", "west", "east"):
+            dx, dy, dz = NEIGHBOURS[direction]
+            neighbour = (position[0] + dx, position[1] + dy, position[2] + dz)
+            neighbour_block = voxels.get(neighbour)
+            # El aire no se guarda en ``voxels``; un bloque sólido u otro fluido corta
+            # la corriente, igual que ``affectsFlow``.
+            if neighbour_block is not None and self._fluid(neighbour_block) != fluid:
+                continue
+            height = self._fluid_own_height_at(voxels, neighbour, fluid)
+            delta = 0.0
+            if height == 0.0:
+                # Borde de una caída: el agua del bloque inferior empuja la corriente
+                # hacia el hueco. Es la rama ``height - 8/9`` de vanilla.
+                below = (neighbour[0], neighbour[1] - 1, neighbour[2])
+                below_height = self._fluid_own_height_at(voxels, below, fluid)
+                if below_height > 0.0:
+                    delta = own - (below_height - 8.0 / 9.0)
+            else:
+                delta = own - height
+            if delta != 0.0:
+                flow_x += dx * delta
+                flow_z += dz * delta
+
+        # Una columna que cae sin vecinos horizontales también debe usar la textura de
+        # flujo; sin esto el agua cayendo volvería a la textura quieta.
+        if flow_x == 0.0 and flow_z == 0.0:
+            return (0.0, -1.0) if _fluid_level(block) >= 8 else (0.0, 0.0)
+        length = math.hypot(flow_x, flow_z)
+        return (flow_x / length, flow_z / length)
+
     def _fluid_state_mesh(
         self,
         block: BlockState,
@@ -937,17 +1002,21 @@ class MeshBuilder:
         x, y, z = position
         below = voxels.get((x, y - 1, z))
         bottom = 0.0 if self._fluid(below) == fluid else _FLUID_INSET
+        # Con el mismo fluido encima la columna es continua: no hay superficie que bajar.
+        top = 0.0 if self._fluid_above(voxels, position, fluid) else _FLUID_INSET
+        flow = self._fluid_flow(block, fluid, position, voxels)
         key = (
             self.state_key(block),
+            fluid,
             tuple(round(height, 6) for height in heights),
             bottom,
+            top,
+            tuple(round(component, 6) for component in flow),
         )
         cached = self._fluids.get(key)
         if cached is not None:
             return cached
 
-        # Con el mismo fluido encima la columna es continua: no hay superficie que bajar.
-        top = 0.0 if self._fluid_above(voxels, position, fluid) else _FLUID_INSET
         nw, sw, se, ne = (max(height - top, 0.0) for height in heights)
         corners = np.array(
             [
@@ -962,12 +1031,17 @@ class MeshBuilder:
             ],
             dtype=np.float32,
         )
-        texture = FLUID_TEXTURES.get(fluid, f"minecraft:block/{fluid}_still")
         tintindex = 0 if fluid == "water" else None
         # El tinte se resuelve con el nombre del fluido, no con el bloque anfitrión: una
         # escalera *waterlogged* no debe teñir el agua con el verde del césped.
-        sprite = self.atlas.add(texture, self.tints.tint_for(f"minecraft:{fluid}", tintindex))
-        alpha_mode = self.atlas.alpha_mode(sprite)
+        tint = self.tints.tint_for(f"minecraft:{fluid}", tintindex)
+        still_texture = FLUID_TEXTURES.get(fluid, f"minecraft:block/{fluid}_still")
+        flow_texture = FLUID_FLOW_TEXTURES.get(fluid, f"minecraft:block/{fluid}_flow")
+        still_sprite = self.atlas.add(still_texture, tint)
+        flow_sprite = self.atlas.add(flow_texture, tint)
+        still_alpha = self.atlas.alpha_mode(still_sprite)
+        flow_alpha = self.atlas.alpha_mode(flow_sprite)
+        flowing = flow != (0.0, 0.0)
         templates: list[QuadTemplate] = []
         for direction in FACE_DIRECTIONS:
             positions = corners[list(FACE_CORNERS[direction])].copy()
@@ -979,9 +1053,33 @@ class MeshBuilder:
                 positions[:, 0] += _FLUID_INSET
             elif direction == "east":
                 positions[:, 0] -= _FLUID_INSET
-            st = np.zeros((4, 2), dtype=np.float32)
-            for slot, corner in enumerate(FACE_UV_ORDER[direction]):
-                st[slot] = UV_CORNERS[corner]
+            if direction in ("north", "south", "west", "east"):
+                # Vanilla usa siempre la textura de flujo en los laterales. La V va del
+                # borde superior del fluido al centro del fotograma, de modo que la
+                # textura (rayas verticales) recorre la altura de la caída.
+                sprite = flow_sprite
+                alpha_mode = flow_alpha
+                st = np.array(
+                    [
+                        [0.0, 0.5],
+                        [0.5, 0.5],
+                        [0.5, (1.0 - float(positions[2, 1])) * 0.5],
+                        [0.0, (1.0 - float(positions[3, 1])) * 0.5],
+                    ],
+                    dtype=np.float32,
+                )
+            elif direction == "up" and flowing:
+                # La superficie en movimiento se dibuja con la textura de flujo girada
+                # hacia la dirección de la corriente (``FluidRenderer``).
+                sprite = flow_sprite
+                alpha_mode = flow_alpha
+                st = _fluid_top_uv(flow)
+            else:
+                sprite = still_sprite
+                alpha_mode = still_alpha
+                st = np.zeros((4, 2), dtype=np.float32)
+                for slot, corner in enumerate(FACE_UV_ORDER[direction]):
+                    st[slot] = UV_CORNERS[corner]
             templates.append(
                 QuadTemplate(
                     positions=positions,
@@ -1344,6 +1442,27 @@ def _average_fluid_height(
             total += height
             weight += 1.0
     return total / weight if weight else own
+
+
+def _fluid_top_uv(flow: tuple[float, float]) -> np.ndarray:
+    """UVs de la superficie de un fluido en movimiento, giradas hacia la corriente.
+
+    Es la misma rotación de ``FluidRenderer``: se toma un cuadrado de lado ``0.5``
+    centrado en el sprite y se gira el ángulo de la corriente. Las esquinas siguen el
+    orden de :data:`FACE_CORNERS` para ``up``: NO, SO, SE, NE.
+    """
+    angle = math.atan2(flow[1], flow[0]) - math.pi / 2.0
+    sin = math.sin(angle) * 0.25
+    cos = math.cos(angle) * 0.25
+    return np.array(
+        [
+            [0.5 - cos - sin, 0.5 - cos + sin],
+            [0.5 - cos + sin, 0.5 + cos + sin],
+            [0.5 + cos + sin, 0.5 + cos - sin],
+            [0.5 + cos - sin, 0.5 - cos - sin],
+        ],
+        dtype=np.float32,
+    )
 
 
 def _is_bars(block: BlockState) -> bool:
