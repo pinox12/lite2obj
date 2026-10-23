@@ -93,6 +93,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         tint=not args.no_tint,
         atlas_scale=args.atlas_scale,
         entities=not args.no_entities,
+        mobs=args.mobs,
     )
     result = export(
         args.path,
@@ -162,6 +163,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-entities",
         action="store_true",
         help="no dibuja entidades ni *block entities* (cofres, marcos, cuadros...)",
+    )
+    export.add_argument(
+        "--mobs",
+        action="store_true",
+        help="dibuja criaturas (desactivado por defecto; requiere entidades)",
     )
     export.add_argument(
         "--atlas-scale",

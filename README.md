@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 277 tests |
+| F8 | Tests | ✅ 280 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -49,6 +49,8 @@ uv run lite2obj export esquema.litematic salida/ --packs "Mizunos 16 Craft JE_1.
 uv run lite2obj export esquema.litematic salida/ --atlas-scale 2 --scale 0.5
 # Sólo bloques, sin entidades ni block entities
 uv run lite2obj export esquema.litematic salida/ --no-entities
+# Añade criaturas a las demás entidades (por defecto no se dibujan)
+uv run lite2obj export esquema.litematic salida/ --mobs
 
 # Abre la aplicación de escritorio
 uv run lite2obj gui
@@ -151,8 +153,10 @@ Notas de fidelidad:
   La colocación copia las matrices de vanilla (`LivingEntityRenderer`, `ChestRenderer`,
   `ItemFrameRenderer`…), incluyendo bebés, variantes de color y las poses NBT del soporte de
   armadura. Los objetos de los marcos se resuelven con el árbol `items/<id>.json` y las
-  transformaciones `display.fixed` del modelo. `--no-entities` (o la casilla *Dibujar
-  entidades* de la app) deja sólo los bloques.
+  transformaciones `display.fixed` del modelo. Las criaturas están **desactivadas por
+  defecto**: `--mobs` (o la casilla *Dibujar mobs* de la app) las añade. `--no-entities` (o
+  la casilla *Dibujar entidades*) deja sólo los bloques y sigue apagando también las
+  criaturas.
   Limitaciones: no se dibujan armaduras ni equipación, los patrones de estandarte no se
   guardan en los esquemáticos escaneados y los modelos de objeto con renderer especial
   (`special`) se omiten. Los cuadros usan el `variant` del NBT y caen a `kebab` si falta.
@@ -183,8 +187,8 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
 - **Resource packs**: lista con casillas; arriba tiene más prioridad y los assets que falten
   caen al vanilla.
 - **Vista y render**: descartar caras ocultas, *backface culling* como Minecraft, tintes de
-  bioma, entidades y *block entities*, resolución del atlas (×1/×2/×4), texturas suavizadas,
-  rejilla, ejes, wireframe y corte por capas Y.
+  bioma, entidades y *block entities*, criaturas (desactivadas por defecto), resolución del
+  atlas (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y corte por capas Y.
 - **Exportar a Blender**: carpeta, nombre, agrupación, escala y `Z arriba` (nativo de Blender).
 
 La vista 3D se renderiza con el OpenGL nativo de Qt (PySide6), no con el navegador: órbita con

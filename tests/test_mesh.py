@@ -982,7 +982,7 @@ def test_armor_stand_hides_arms_and_base_plate_when_asked():
 
 
 def test_living_entity_uses_its_layer_and_baby_variant():
-    builder = entity_setup()
+    builder = entity_setup(mobs=True)
 
     def build(**extra):
         entity = {"id": "minecraft:pig", "Pos": [0.5, 0.0, 0.5]}
@@ -1000,6 +1000,22 @@ def test_living_entity_uses_its_layer_and_baby_variant():
     assert baby.quad_count == 42
     assert baby.positions[:, 1].max() < adult.positions[:, 1].max()
     assert baby.atlas.sprite("minecraft:entity/pig/pig_temperate_baby") is not None
+
+
+def test_mobs_are_hidden_by_default_and_rendered_with_the_flag():
+    def build(**options):
+        builder = entity_setup(**options)
+        region = _region([AIR], [0], (1, 1, 1))
+        region.entities = [{"id": "minecraft:pig", "Pos": [0.5, 0.0, 0.5]}]
+        return builder.build(_doc([region], (1, 1, 1)))
+
+    hidden = build()
+    assert hidden.quad_count == 0
+    assert hidden.atlas.sprite("minecraft:entity/pig/pig_temperate") is None
+
+    shown = build(mobs=True)
+    assert shown.quad_count == 42
+    assert shown.atlas.sprite("minecraft:entity/pig/pig_temperate") is not None
 
 
 def test_unknown_malformed_and_invisible_entities_are_ignored():

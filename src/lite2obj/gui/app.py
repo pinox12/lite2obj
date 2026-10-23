@@ -235,7 +235,11 @@ class MainWindow(QMainWindow):
         self.tint_check.setChecked(True)
         self.entities_check = QCheckBox("Dibujar entidades")
         self.entities_check.setChecked(True)
-        self.entities_check.setToolTip("Cofres, marcos de objeto, cuadros, criaturas...")
+        self.entities_check.setToolTip("Cofres, marcos de objeto, cuadros, barcos...")
+        self.mobs_check = QCheckBox("Dibujar mobs")
+        self.mobs_check.setChecked(False)
+        self.mobs_check.setToolTip("Criaturas como cerdos, aldeanos o monstruos (desactivado)")
+        self.mobs_check.setEnabled(self.entities_check.isChecked())
         self.smooth_check = QCheckBox("Suavizar texturas")
         self.smooth_check.setToolTip("Filtrado lineal con mipmaps en el visor")
         self.grid_check = QCheckBox("Mostrar rejilla")
@@ -247,6 +251,7 @@ class MainWindow(QMainWindow):
             self.cull_check,
             self.tint_check,
             self.entities_check,
+            self.mobs_check,
             self.smooth_check,
             self.grid_check,
             self.axes_check,
@@ -433,6 +438,8 @@ class MainWindow(QMainWindow):
         self.cull_check.toggled.connect(self._invalidate)
         self.tint_check.toggled.connect(self._invalidate)
         self.entities_check.toggled.connect(self._invalidate)
+        self.entities_check.toggled.connect(self.mobs_check.setEnabled)
+        self.mobs_check.toggled.connect(self._invalidate)
         self.atlas_scale_combo.currentIndexChanged.connect(self._invalidate)
         self.smooth_check.toggled.connect(self.viewport.set_smooth)
         self.smooth_check.toggled.connect(self.smooth_action.setChecked)
@@ -606,6 +613,7 @@ class MainWindow(QMainWindow):
             tint=self.tint_check.isChecked(),
             atlas_scale=int(self.atlas_scale_combo.currentData()),
             entities=self.entities_check.isChecked(),
+            mobs=self.mobs_check.isChecked(),
         )
 
     def _render_key(self) -> tuple:
@@ -616,6 +624,7 @@ class MainWindow(QMainWindow):
             self.tint_check.isChecked(),
             int(self.atlas_scale_combo.currentData()),
             self.entities_check.isChecked(),
+            self.mobs_check.isChecked(),
         )
 
     def render_mesh(self) -> None:

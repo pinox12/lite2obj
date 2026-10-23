@@ -407,10 +407,13 @@ class EntityRenderer:
         resolver: ModelResolver,
         atlas: TextureAtlas,
         state_templates: Callable[[BlockState], tuple[_mesh.QuadTemplate, ...]],
+        *,
+        mobs: bool = False,
     ) -> None:
         self.resolver = resolver
         self.atlas = atlas
         self.state_templates = state_templates
+        self.mobs = mobs
         self.items = ItemRenderer(resolver, atlas)
 
     # -- construcción de plantillas --------------------------------------- #
@@ -734,6 +737,12 @@ class EntityRenderer:
             return self._boat(entity, base)
         if kind == "minecart" or kind.endswith("_minecart"):
             return self._minecart(entity, kind)
+        # Todo lo que llega aquí es una criatura: botes, vagonetas, marcos, cuadros,
+        # soportes de armadura, objetos y proyectiles ya se han resuelto antes. Las
+        # criaturas están desactivadas por defecto para que el esquemático muestre sólo
+        # la construcción salvo que se pidan explícitamente.
+        if not self.mobs:
+            return []
         return self._living(entity, kind)
 
     def _boat(self, entity: dict[str, Any], base: str) -> list[EntityPlacement]:

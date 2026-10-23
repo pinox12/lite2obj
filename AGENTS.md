@@ -99,6 +99,10 @@ Pipeline order, each layer assuming the previous:
     vanilla's `0.001` insets/drop so the fluid is not coplanar with the host block (Blender
     keeps one of coincident faces). Fluid tint is resolved with the fluid name, not the host
     block.
+  - Creatures are opt-in: `mobs` defaults to `False`, and `EntityRenderer.entity()` skips
+    only the `_living()` fallthrough. Boats, minecarts, frames, paintings, armor stands,
+    items and projectiles are resolved before that point and are unaffected. `entities=False`
+    still removes every entity, block entity and cushion.
   - `MeshBuilder.build()` calls `atlas.build()` and only then finalizes state UVs.
     Sprites are registered while building state templates; don't finalize before packing.
 - Atlas: power-of-two, shelf-packed, 2 px padding, alpha modes 0/1/2

@@ -55,6 +55,7 @@ class RenderOptions:
     max_quads: int = 0
     fallback_mode: str = "cube"
     entities: bool = True
+    mobs: bool = False
 
     def mesh_options(self) -> MeshOptions:
         return MeshOptions(
@@ -65,6 +66,7 @@ class RenderOptions:
             max_quads=self.max_quads,
             fallback_mode=self.fallback_mode,
             entities=self.entities,
+            mobs=self.mobs,
         )
 
 

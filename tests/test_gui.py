@@ -173,6 +173,13 @@ def test_cli_export_accepts_no_entities():
     assert parser.parse_args(["export", "a.litematic"]).no_entities is False
 
 
+def test_cli_export_accepts_mobs():
+    parser = build_parser()
+    args = parser.parse_args(["export", "a.litematic", "--mobs"])
+    assert args.mobs is True
+    assert parser.parse_args(["export", "a.litematic"]).mobs is False
+
+
 def test_render_options_pass_atlas_scale_to_mesh():
     from lite2obj.pipeline import RenderOptions
 
@@ -188,6 +195,15 @@ def test_render_options_can_disable_entities():
     from lite2obj.pipeline import RenderOptions
 
     assert RenderOptions(entities=False).mesh_options().entities is False
+    assert RenderOptions(entities=False, mobs=True).mesh_options().entities is False
+
+
+def test_render_options_mobs_are_off_by_default():
+    from lite2obj.pipeline import RenderOptions
+
+    assert RenderOptions().mobs is False
+    assert RenderOptions().mesh_options().mobs is False
+    assert RenderOptions(mobs=True).mesh_options().mobs is True
 
 
 # --------------------------------------------------------------------------- #
@@ -204,6 +220,8 @@ def test_mainwindow_starts_offscreen(tmp_path):
         "from lite2obj.gui.app import MainWindow\n"
         "app = QApplication([])\n"
         "window = MainWindow()\n"
+        "assert window.entities_check.isChecked() is True\n"
+        "assert window.mobs_check.isChecked() is False\n"
         "window.show()\n"
         "QTimer.singleShot(300, app.quit)\n"
         "app.exec()\n"

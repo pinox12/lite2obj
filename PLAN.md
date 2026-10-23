@@ -12,7 +12,7 @@ sin navegador.
 ## Estado (v1 funcional de punta a punta)
 
 F1–F8 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
-texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 277
+texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 280
 tests, `ruff` y `mypy` limpios.
 
 | Fase | Estado | Nota |
@@ -24,7 +24,7 @@ tests, `ruff` y `mypy` limpios.
 | F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
 | F6 CLI | ✅ | `info`, `list`, `export` |
 | F7 App de escritorio | ✅ | PySide6 + OpenGL de Qt; órbita, capas, wireframe, captura y export desde la UI |
-| F8 Tests | ✅ | 277 tests; golden de conteos, `uvlock` documentado |
+| F8 Tests | ✅ | 280 tests; golden de conteos, `uvlock` documentado |
 
 Módulos reales (los nombres del plan cambiaron al implementar):
 
@@ -72,7 +72,9 @@ Desviaciones respecto al plan:
   `ModelPart` se empaqueta en `entity_models.json` y las matrices de colocación copian a
   vanilla. Los objetos de marcos y entidades `item` se resuelven con `items/<id>.json`
   (`items.py`); el inventario de cofres y otros contenedores sigue fuera de alcance, aunque
-  el bloque que llevan las vagonetas sí se dibuja.
+  el bloque que llevan las vagonetas sí se dibuja. Las criaturas son opcionales
+  (`mobs`, desactivado por defecto) y se separan del resto de entidades en
+  `EntityRenderer.entity()`.
 - **Tintes**: se aplican multiplicando la textura (sprites teñidos dentro del atlas), en vez
   de colores por vértice, para que el color viaje en el OBJ sin nada extra.
 
@@ -234,7 +236,8 @@ Notas:
 - **Entidades y *block entities***: cofres, estandartes, cajas de shulker, macetas,
   calaveras, conductos, campanas, marcos con objeto, cuadros, soportes de armadura,
   objetos tirados, proyectiles y criaturas. Los *block entities* sustituyen al modelo de su
-  bloque y el resto se coloca con su `Pos`.
+  bloque y el resto se coloca con su `Pos`. Las criaturas se omiten por defecto y sólo se
+  añaden con `mobs=True` / `--mobs`; `entities=False` / `--no-entities` sigue apagando todo.
 - **DoD**: la casa de ejemplo pierde >50% de caras internas y renderiza sin huecos.
 
 ### F5 · Export a Blender
