@@ -341,6 +341,16 @@ def is_skull_block(block: BlockState | None) -> bool:
     return block is not None and _is_skull_path(block.path)
 
 
+def _is_banner_path(path: str) -> bool:
+    """Cierto para estandartes de pie o de pared, no para macetas."""
+    return "banner" in path and not path.startswith("potted")
+
+
+def is_banner_block(block: BlockState | None) -> bool:
+    """Cierto si el bloque es un estandarte colocado."""
+    return block is not None and _is_banner_path(block.path)
+
+
 def _entity_id(entity: dict[str, Any]) -> str:
     return _path(str(entity.get("id", "")))
 
@@ -506,7 +516,7 @@ class EntityRenderer:
         path = block.path if block is not None else _path(str(tile.get("id", "")))
         if path in _CHEST_MATERIALS:
             return self._chest(block, path, anchor)
-        if "banner" in path and not path.startswith("potted"):
+        if _is_banner_path(path):
             return self._banner(tile, block, anchor)
         if path.endswith("shulker_box"):
             return self._shulker(block, anchor)
@@ -569,8 +579,12 @@ class EntityRenderer:
             facing = _prop(block, "facing", "north") or "north"
             angle = _Y_ROT.get(facing, 180.0)
         else:
+            # El NBT puede faltar en el esquemático; el blockstate guarda la rotación.
+            rotation = tile.get("Rotation")
+            if rotation is None:
+                rotation = _prop(block, "rotation", "0")
             try:
-                angle = float(tile.get("Rotation", 0)) * 22.5
+                angle = float(rotation or 0) * 22.5
             except TypeError, ValueError:
                 angle = 0.0
 
@@ -579,6 +593,7 @@ class EntityRenderer:
             @ _m4(rot_y(angle))
             @ _scale(2.0 / 3.0, -2.0 / 3.0, -2.0 / 3.0)
         )
+        # De momento sólo se pinta el color base: los patrones del NBT se ignoran.
         # El palo usa la textura completa (madera incluida); la tela va aparte y teñida.
         main = self._templates(f"{layer}#main", "entity/banner/banner_base", matrix=matrix)
         flag = self._templates(f"{layer}#flag", "entity/banner/base", tint=tint, matrix=matrix)

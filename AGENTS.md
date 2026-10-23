@@ -108,7 +108,9 @@ Pipeline order, each layer assuming the previous:
   - A placed skull/head always has a block entity in vanilla, but some `.litematic` files
     have an empty `TileEntities`. `MeshBuilder` synthesizes it from the blockstate;
     `block/skull` has no elements, so otherwise the fallback cube uses the particle texture.
-    `_is_skull_path` must keep excluding `piston_head`.
+    `_is_skull_path` must keep excluding `piston_head`. Banners get the same blockstate
+    fallback (standing `rotation`, wall `facing`); only the base dye colour is tinted for
+    now, patterns are intentionally ignored.
   - `MeshBuilder.build()` calls `atlas.build()` and only then finalizes state UVs.
     Sprites are registered while building state templates; don't finalize before packing.
 - Atlas: power-of-two, shelf-packed, 2 px padding, alpha modes 0/1/2

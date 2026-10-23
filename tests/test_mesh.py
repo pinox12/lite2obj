@@ -591,6 +591,9 @@ def entity_setup(**options) -> MeshBuilder:
         blockstate_path("minecraft:light_blue_banner"): {
             "variants": {"": {"model": "test:block/empty"}}
         },
+        blockstate_path("minecraft:light_blue_wall_banner"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
         blockstate_path("minecraft:white_shulker_box"): {
             "variants": {"": {"model": "test:block/empty"}}
         },
@@ -797,6 +800,35 @@ def test_skull_is_not_synthesized_with_entities_disabled():
     mesh = builder.build(_doc([region], (1, 1, 1)))
 
     assert mesh.atlas.sprite("minecraft:entity/skeleton/skeleton") is None
+
+
+def test_banner_without_tile_entity_uses_blockstate_color_and_rotation():
+    builder = entity_setup()
+    banner = BlockState("minecraft:light_blue_banner", (("rotation", "4"),))
+    region = _region([AIR, banner], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    tint = mesh.atlas.sprite("minecraft:entity/banner/base", (58, 179, 218))
+    assert tint is not None
+    assert _sprites_of(mesh, tint).sum() > 0
+    assert mesh.atlas.sprite("minecraft:entity/banner/banner_base") is not None
+    assert mesh.quad_count == 18
+    # ``rotation=4`` son 90°: la tela, ancha en X, pasa a ser ancha en Z.
+    x_extent = mesh.positions[:, 0].max() - mesh.positions[:, 0].min()
+    z_extent = mesh.positions[:, 2].max() - mesh.positions[:, 2].min()
+    assert z_extent > x_extent
+
+
+def test_wall_banner_without_tile_entity_uses_blockstate_color():
+    builder = entity_setup()
+    banner = BlockState("minecraft:light_blue_wall_banner", (("facing", "north"),))
+    region = _region([AIR, banner], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    tint = mesh.atlas.sprite("minecraft:entity/banner/base", (58, 179, 218))
+    assert tint is not None
+    assert _sprites_of(mesh, tint).sum() > 0
+    assert mesh.quad_count == 12
 
 
 def test_banner_parses_two_word_colors_and_tints_the_flag():

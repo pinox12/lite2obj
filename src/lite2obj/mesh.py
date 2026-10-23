@@ -1183,7 +1183,12 @@ class MeshBuilder:
         # coloca con su ``Pos``, relativo a la esquina 1 de la selección (``Position``).
         entity_placements: list[EntityPlacement] = []
         if options.entities:
-            from .entities import EntityPlacement, EntityRenderer, is_skull_block
+            from .entities import (
+                EntityPlacement,
+                EntityRenderer,
+                is_banner_block,
+                is_skull_block,
+            )
 
             renderer = EntityRenderer(
                 self.resolver,
@@ -1206,13 +1211,12 @@ class MeshBuilder:
                     entity_placements.append(placement)
                     if placement.replace_block:
                         replaced.add(position)
-            # Una calavera colocada siempre tiene *block entity* en el mundo, pero algunos
-            # `.litematic` no guardan ``TileEntities``. Su tipo y rotación están en el
-            # blockstate, así que se puede reconstruir sin NBT (la piel de jugador cae al
-            # aspecto por defecto). El modelo ``block/skull`` no tiene geometría: sin esto
-            # se vería el cubo de respaldo con la textura de partículas.
+            # Algunas *block entities* no necesitan NBT para su geometría: la calavera y el
+            # estandarte tienen tipo, color y rotación en el blockstate. Si el `.litematic`
+            # no guarda ``TileEntities``, se reconstruyen desde ahí. En el estandarte se
+            # pinta sólo el color base; los patrones quedan para más adelante.
             for position, block in voxels.items():
-                if position in replaced or not is_skull_block(block):
+                if position in replaced or not (is_skull_block(block) or is_banner_block(block)):
                     continue
                 placement = renderer.tile_entity({}, block, position)
                 if placement is None:

@@ -12,7 +12,7 @@ sin navegador.
 ## Estado (v1 funcional de punta a punta)
 
 F1–F8 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
-texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 289
+texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 291
 tests, `ruff` y `mypy` limpios.
 
 | Fase | Estado | Nota |
@@ -24,7 +24,7 @@ tests, `ruff` y `mypy` limpios.
 | F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
 | F6 CLI | ✅ | `info`, `list`, `export` |
 | F7 App de escritorio | ✅ | PySide6 + OpenGL de Qt; órbita, capas, wireframe, captura y export desde la UI |
-| F8 Tests | ✅ | 289 tests; golden de conteos, `uvlock` documentado |
+| F8 Tests | ✅ | 291 tests; golden de conteos, `uvlock` documentado |
 
 Módulos reales (los nombres del plan cambiaron al implementar):
 
@@ -236,10 +236,11 @@ Notas:
 - **Entidades y *block entities***: cofres, estandartes, cajas de shulker, macetas,
   calaveras, conductos, campanas, marcos con objeto, cuadros, soportes de armadura,
   objetos tirados, proyectiles y criaturas. Los *block entities* sustituyen al modelo de su
-  bloque y el resto se coloca con su `Pos`. Las calaveras se reconstruyen desde el blockstate
-  si el esquemático no guarda `TileEntities` (su modelo de bloque no tiene geometría). Las
-  criaturas se omiten por defecto y sólo se añaden con `mobs=True` / `--mobs`;
-  `entities=False` / `--no-entities` sigue apagando todo.
+  bloque y el resto se coloca con su `Pos`. Las calaveras y los estandartes se reconstruyen
+  desde el blockstate si el esquemático no guarda `TileEntities` (sus modelos de bloque no
+  tienen geometría). En los estandartes sólo se pinta el color base; los patrones quedan para
+  más adelante. Las criaturas se omiten por defecto y sólo se añaden con `mobs=True` /
+  `--mobs`; `entities=False` / `--no-entities` sigue apagando todo.
 - **DoD**: la casa de ejemplo pierde >50% de caras internas y renderiza sin huecos.
 
 ### F5 · Export a Blender

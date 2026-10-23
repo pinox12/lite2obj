@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 289 tests |
+| F8 | Tests | ✅ 291 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -158,10 +158,12 @@ Notas de fidelidad:
   la casilla *Dibujar entidades*) deja sólo los bloques y sigue apagando también las
   criaturas. Las calaveras y cabezas se reconstruyen desde su blockstate cuando el
   `.litematic` no trae `TileEntities`; el modelo `block/skull` no tiene geometría y sin
-  esto se veía el cubo de respaldo con la textura de partículas.
-  Limitaciones: no se dibujan armaduras ni equipación, los patrones de estandarte no se
-  guardan en los esquemáticos escaneados y los modelos de objeto con renderer especial
-  (`special`) se omiten. Los cuadros usan el `variant` del NBT y caen a `kebab` si falta.
+  esto se veía el cubo de respaldo con la textura de partículas. Los estandartes también
+  se reconstruyen desde el blockstate: de momento sólo se pinta su color base y los
+  patrones se ignoran.
+  Limitaciones: no se dibujan armaduras ni equipación, los patrones de estandarte quedan
+  para más adelante y los modelos de objeto con renderer especial (`special`) se omiten.
+  Los cuadros usan el `variant` del NBT y caen a `kebab` si falta.
 - **Entidades cojín**: `minecraft:cushion` no es un bloque, sino una entidad que Litematica
   guarda en `Region.Entities`. Se renderiza con la geometría real de `CushionModel`
   (caja de `1 x 0.25 x 1`, `CubeDeformation(-0.005)`), su textura
