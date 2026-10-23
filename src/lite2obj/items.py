@@ -105,14 +105,17 @@ def _generated_item(
     for layer in layers:
         sprite = atlas.combine(sprite, atlas.add(layer))
     alpha_mode = atlas.alpha_mode(sprite)
-    st = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], dtype=np.float32)
+    # Orden CCW visto desde ``+Z`` para que la normal de la cara frontal apunte hacia
+    # fuera. Invertirlo dejaba las dos caras del objeto mirando al mismo lado y el visor,
+    # que descarta las traseras, no dibujaba el objeto del marco.
+    st = np.array([[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]], dtype=np.float32)
 
     front = np.array(
         [
-            [0.0, 1.0, _FRONT_Z],
-            [1.0, 1.0, _FRONT_Z],
-            [1.0, 0.0, _FRONT_Z],
             [0.0, 0.0, _FRONT_Z],
+            [1.0, 0.0, _FRONT_Z],
+            [1.0, 1.0, _FRONT_Z],
+            [0.0, 1.0, _FRONT_Z],
         ],
         dtype=np.float32,
     )

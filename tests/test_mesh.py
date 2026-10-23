@@ -895,6 +895,12 @@ def test_item_frame_attaches_to_every_face(facing, pos, axis, support, outward):
     assert item_texture is not None
     frame = _quad_points(mesh, _sprites_of(mesh, frame_texture))[:, axis]
     item = _quad_points(mesh, _sprites_of(mesh, item_texture))[:, axis]
+    # El visor descarta las caras traseras: la cara exterior del objeto debe mirar hacia
+    # fuera del apoyo, no hacia la pared.
+    item_quads = mesh.quads[_sprites_of(mesh, item_texture)]
+    expected = np.zeros(3, dtype=np.float32)
+    expected[axis] = outward
+    assert any(np.allclose(normal, expected) for normal in mesh.normals[item_quads.ravel()])
     if outward < 0:
         assert frame.min() == pytest.approx(support - 1.0 / 32.0)
         assert frame.max() == pytest.approx(support)
