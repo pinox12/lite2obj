@@ -56,6 +56,19 @@ __all__ = ["MainWindow", "main", "run"]
 
 _LITEMATIC_FILTER = "Litematica (*.litematic);;Todos los archivos (*)"
 _PNG_FILTER = "PNG (*.png);;Todos los archivos (*)"
+_DEMO_SCHEMATIC_NAME = "all_blocks_and_entities.litematic"
+
+
+def _demo_schematic_path() -> Path:
+    """Ruta del esquemático de prueba incluido en el repositorio."""
+    candidates = (
+        Path(__file__).resolve().parents[3] / _DEMO_SCHEMATIC_NAME,
+        Path.cwd() / _DEMO_SCHEMATIC_NAME,
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
 
 
 class _Signals(QObject):
@@ -378,6 +391,10 @@ class MainWindow(QMainWindow):
         self.wire_action.setCheckable(True)
         self.wire_action.setShortcut(QKeySequence("W"))
 
+        self.demo_action = QAction("Renderizar litemática de prueba", self)
+        self.demo_action.setToolTip("Abre y renderiza all_blocks_and_entities.litematic")
+        self.demo_action.triggered.connect(lambda: self._render_demo())
+
         self.about_action = QAction("Acerca de lite2obj", self)
         self.about_action.triggered.connect(lambda: self._about())
 
@@ -402,7 +419,10 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.wire_action)
         view_menu.addAction(self.smooth_action)
 
-        self.menuBar().addMenu("Ayuda").addAction(self.about_action)
+        help_menu = self.menuBar().addMenu("Ayuda")
+        help_menu.addAction(self.demo_action)
+        help_menu.addSeparator()
+        help_menu.addAction(self.about_action)
 
     def _build_toolbar(self) -> None:
         toolbar = self.addToolBar("Principal")
@@ -828,6 +848,23 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"Captura guardada: {path}")
         else:
             self._show_error("No se pudo guardar la captura.", path)
+
+    def _render_demo(self) -> None:
+        if self._busy:
+            self.status_label.setText("Espera a que termine la operación actual")
+            return
+        path = _demo_schematic_path()
+        if not path.is_file():
+            self._show_error(
+                "No se encontró el esquemático de prueba.",
+                f"Se esperaba en {path}",
+            )
+            return
+        self.status_label.setText("Abriendo litemática de prueba…")
+        self.mobs_check.setChecked(True)
+        self.grid_check.setChecked(False)
+        self.axes_check.setChecked(False)
+        self.open_path(path)
 
     def _about(self) -> None:
         QMessageBox.about(
