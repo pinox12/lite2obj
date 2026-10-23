@@ -166,6 +166,13 @@ def test_cli_export_accepts_atlas_scale_and_scale():
     assert args.scale == 0.5
 
 
+def test_cli_export_accepts_no_entities():
+    parser = build_parser()
+    args = parser.parse_args(["export", "a.litematic", "--no-entities"])
+    assert args.no_entities is True
+    assert parser.parse_args(["export", "a.litematic"]).no_entities is False
+
+
 def test_render_options_pass_atlas_scale_to_mesh():
     from lite2obj.pipeline import RenderOptions
 
@@ -174,6 +181,13 @@ def test_render_options_pass_atlas_scale_to_mesh():
     assert mesh_options.atlas_scale == 2
     assert mesh_options.cull is False
     assert mesh_options.tint is False
+    assert mesh_options.entities is True
+
+
+def test_render_options_can_disable_entities():
+    from lite2obj.pipeline import RenderOptions
+
+    assert RenderOptions(entities=False).mesh_options().entities is False
 
 
 # --------------------------------------------------------------------------- #

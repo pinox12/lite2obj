@@ -233,6 +233,9 @@ class MainWindow(QMainWindow):
         self.cull_check.setToolTip("Activa el culling por cullface del modelo")
         self.tint_check = QCheckBox("Teñir biomas (plains)")
         self.tint_check.setChecked(True)
+        self.entities_check = QCheckBox("Dibujar entidades")
+        self.entities_check.setChecked(True)
+        self.entities_check.setToolTip("Cofres, marcos de objeto, cuadros, criaturas...")
         self.smooth_check = QCheckBox("Suavizar texturas")
         self.smooth_check.setToolTip("Filtrado lineal con mipmaps en el visor")
         self.grid_check = QCheckBox("Mostrar rejilla")
@@ -243,6 +246,7 @@ class MainWindow(QMainWindow):
         for widget in (
             self.cull_check,
             self.tint_check,
+            self.entities_check,
             self.smooth_check,
             self.grid_check,
             self.axes_check,
@@ -428,6 +432,7 @@ class MainWindow(QMainWindow):
 
         self.cull_check.toggled.connect(self._invalidate)
         self.tint_check.toggled.connect(self._invalidate)
+        self.entities_check.toggled.connect(self._invalidate)
         self.atlas_scale_combo.currentIndexChanged.connect(self._invalidate)
         self.smooth_check.toggled.connect(self.viewport.set_smooth)
         self.smooth_check.toggled.connect(self.smooth_action.setChecked)
@@ -600,6 +605,7 @@ class MainWindow(QMainWindow):
             cull=self.cull_check.isChecked(),
             tint=self.tint_check.isChecked(),
             atlas_scale=int(self.atlas_scale_combo.currentData()),
+            entities=self.entities_check.isChecked(),
         )
 
     def _render_key(self) -> tuple:
@@ -609,6 +615,7 @@ class MainWindow(QMainWindow):
             self.cull_check.isChecked(),
             self.tint_check.isChecked(),
             int(self.atlas_scale_combo.currentData()),
+            self.entities_check.isChecked(),
         )
 
     def render_mesh(self) -> None:

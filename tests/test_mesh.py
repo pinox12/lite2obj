@@ -13,7 +13,14 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from lite2obj.assets import MemorySource, ResourceManager, blockstate_path, model_path, texture_path
+from lite2obj.assets import (
+    MemorySource,
+    ResourceManager,
+    blockstate_path,
+    items_model_path,
+    model_path,
+    texture_path,
+)
 from lite2obj.litematic import BlockState, Litematic, Region
 from lite2obj.mesh import (
     FACE_CORNERS,
@@ -97,13 +104,13 @@ def cube_setup(texture: str = "minecraft:block/tex", *, cullface: bool = True) -
     )
 
 
-def cushion_setup(*colors: str) -> MeshBuilder:
+def cushion_setup(*colors: str, **options) -> MeshBuilder:
     """Builder sin bloques, con las texturas de entidad de los colores indicados."""
     entries = {
         texture_path(f"minecraft:entity/cushion/{color}_cushion"): make_cushion_png()
         for color in colors
     }
-    return make_setup(entries)
+    return make_setup(entries, **options)
 
 
 def _pane_model(direction: str) -> dict:
@@ -537,7 +544,6 @@ def test_cushion_colors_fall_back_to_white_and_bad_entities_are_ignored():
             "Rotation": [90.0, 0.0],
             "color": "red",
         },
-        {"id": "minecraft:armor_stand", "Pos": [2.5, 0.0, 0.5]},
         {"id": "minecraft:cushion", "Pos": [3.5, 0.0]},  # Pos incompleto: se ignora
     ]
     mesh = builder.build(_doc([region], (2, 1, 1)))
@@ -548,6 +554,473 @@ def test_cushion_colors_fall_back_to_white_and_bad_entities_are_ignored():
     # El color inválido no registra una textura inexistente.
     assert "minecraft:entity/cushion/chartreuse_cushion" not in mesh.atlas.missing
     assert len({int(sprite) for sprite in mesh.sprite}) == 2
+
+
+def entity_setup(**options) -> MeshBuilder:
+    """Builder con las texturas y modelos mínimos para las entidades sintéticas.
+
+    Los modelos de entidad vienen del paquete (``entity_models.json``); aquí sólo hacen
+    falta las texturas, el blockstate de los *block entities* y algunos modelos de objeto.
+    """
+    frame = {
+        "textures": {
+            "particle": "minecraft:block/birch_planks",
+            "wood": "minecraft:block/birch_planks",
+            "back": "minecraft:block/item_frame",
+        },
+        "elements": [
+            {
+                "from": [3, 3, 15.5],
+                "to": [13, 13, 16],
+                "faces": {
+                    "north": {"uv": [3, 3, 13, 13], "texture": "#back"},
+                    "south": {"uv": [3, 3, 13, 13], "texture": "#back"},
+                },
+            }
+        ],
+    }
+    entries = {
+        blockstate_path("minecraft:chest"): {"variants": {"": {"model": "test:block/chest"}}},
+        model_path("test:block/chest"): _model("minecraft:entity/chest/normal", cullface=False),
+        blockstate_path("minecraft:item_frame"): {
+            "variants": {
+                "map=false": {"model": "test:block/item_frame"},
+                "map=true": {"model": "test:block/item_frame"},
+            }
+        },
+        blockstate_path("minecraft:light_blue_banner"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
+        blockstate_path("minecraft:white_shulker_box"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
+        blockstate_path("minecraft:hopper"): {"variants": {"": {"model": "test:block/contents"}}},
+        blockstate_path("minecraft:furnace"): {"variants": {"": {"model": "test:block/contents"}}},
+        blockstate_path("minecraft:tnt"): {"variants": {"": {"model": "test:block/contents"}}},
+        blockstate_path("minecraft:command_block"): {
+            "variants": {"": {"model": "test:block/contents"}}
+        },
+        blockstate_path("minecraft:spawner"): {"variants": {"": {"model": "test:block/contents"}}},
+        model_path("test:block/empty"): {"textures": {}, "elements": []},
+        model_path("test:block/contents"): _model("minecraft:block/contents", cullface=False),
+        model_path("test:block/item_frame"): frame,
+        texture_path("minecraft:block/birch_planks"): make_png(),
+        texture_path("minecraft:block/item_frame"): make_png(),
+        texture_path("minecraft:block/contents"): make_png(),
+        texture_path("minecraft:entity/chest/normal"): make_png(),
+        texture_path("minecraft:entity/boat/oak"): make_png(),
+        texture_path("minecraft:entity/chest_boat/oak"): make_png(),
+        texture_path("minecraft:entity/minecart/minecart"): make_png(),
+        texture_path("minecraft:entity/armorstand/armorstand"): make_png(),
+        texture_path("minecraft:entity/banner/banner_base"): make_png(),
+        texture_path("minecraft:entity/banner/base"): make_png(),
+        texture_path("minecraft:entity/shulker/shulker"): make_png(),
+        texture_path("minecraft:entity/shulker/shulker_white"): make_png(),
+        texture_path("minecraft:item/thing"): make_png(color=(255, 0, 0, 255)),
+        items_model_path("minecraft:thing"): {
+            "model": {"type": "minecraft:model", "model": "minecraft:item/thing"}
+        },
+        model_path("minecraft:item/thing"): {
+            "parent": "minecraft:item/generated",
+            "textures": {"layer0": "minecraft:item/thing"},
+        },
+        model_path("minecraft:item/generated"): {
+            "display": {"fixed": {"rotation": [0, 180, 0], "scale": [1, 1, 1]}}
+        },
+        "data/minecraft/painting_variant/kebab.json": {
+            "asset_id": "minecraft:kebab",
+            "width": 1,
+            "height": 1,
+        },
+        "data/minecraft/painting_variant/pointer.json": {
+            "asset_id": "minecraft:pointer",
+            "width": 4,
+            "height": 4,
+        },
+        texture_path("minecraft:painting/kebab"): make_png(),
+        texture_path("minecraft:painting/pointer"): make_png(),
+        texture_path("minecraft:painting/back"): make_png(color=(0, 0, 0, 255)),
+        texture_path("minecraft:entity/pig/pig_temperate"): make_png(),
+        texture_path("minecraft:entity/pig/pig_temperate_baby"): make_png(),
+    }
+    return make_setup(entries, **options)
+
+
+def _chest_state(facing: str = "north") -> BlockState:
+    return BlockState(
+        "minecraft:chest",
+        (("facing", facing), ("type", "single"), ("waterlogged", "false")),
+    )
+
+
+def _sprites_of(mesh, sprite) -> np.ndarray:
+    return mesh.sprite == sprite.index
+
+
+def _quad_points(mesh, selected: np.ndarray) -> np.ndarray:
+    return mesh.positions[mesh.quads[selected]].reshape(-1, 3)
+
+
+@pytest.mark.parametrize(
+    ("facing", "axis", "value"),
+    [
+        ("north", 2, 0.0),
+        ("south", 2, 1.0),
+        ("west", 0, 0.0),
+        ("east", 0, 1.0),
+    ],
+)
+def test_chest_entity_replaces_block_and_faces_its_direction(facing, axis, value):
+    """El cofre es una entidad: sustituye al bloque y se gira según ``facing``."""
+    builder = entity_setup()
+    chest = _chest_state(facing)
+    region = _region([AIR, chest], [1], (1, 1, 1))
+    region.tile_entities = [{"id": "minecraft:chest", "x": 0, "y": 0, "z": 0}]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 18
+    assert mesh.palette[-1] == chest
+    texture = mesh.atlas.sprite("minecraft:entity/chest/normal")
+    assert texture is not None
+    assert np.all(_sprites_of(mesh, texture))
+    # El modelo mide 15/16 de alto y su tapa toca la cara hacia la que mira.
+    assert mesh.positions[:, 1].max() == pytest.approx(0.875)
+    extent = mesh.positions[:, axis]
+    assert (extent.min() if value == 0.0 else extent.max()) == pytest.approx(value)
+
+
+def test_chest_block_keeps_its_model_with_entities_disabled():
+    builder = entity_setup(entities=False)
+    region = _region([AIR, _chest_state()], [1], (1, 1, 1))
+    region.tile_entities = [{"id": "minecraft:chest", "x": 0, "y": 0, "z": 0}]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    # El cubo sintético del bloque, sin la geometría del cofre.
+    assert mesh.quad_count == 6
+
+
+def test_banner_parses_two_word_colors_and_tints_the_flag():
+    builder = entity_setup()
+    banner = BlockState("minecraft:light_blue_banner", (("rotation", "0"),))
+    region = _region([AIR, banner], [1], (1, 1, 1))
+    region.tile_entities = [{"id": "minecraft:banner", "x": 0, "y": 0, "z": 0, "Rotation": 0}]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 18
+    assert mesh.palette[-1] == banner
+    # ``light_blue`` es (58, 179, 218); cortar por el primer guion bajo daba ``light``.
+    tint = mesh.atlas.sprite("minecraft:entity/banner/base", (58, 179, 218))
+    assert tint is not None
+    assert _sprites_of(mesh, tint).sum() > 0
+    assert mesh.atlas.sprite("minecraft:entity/banner/banner_base") is not None
+
+
+def test_white_shulker_box_uses_its_own_texture():
+    builder = entity_setup()
+    shulker = BlockState("minecraft:white_shulker_box", (("facing", "up"),))
+    region = _region([AIR, shulker], [1], (1, 1, 1))
+    region.tile_entities = [{"id": "minecraft:shulker_box", "x": 0, "y": 0, "z": 0}]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 12
+    white = mesh.atlas.sprite("minecraft:entity/shulker/shulker_white")
+    assert white is not None
+    assert _sprites_of(mesh, white).all()
+    # La textura sin color no se registra siquiera.
+    assert mesh.atlas.sprite("minecraft:entity/shulker/shulker") is None
+
+
+def test_boat_and_chest_boat_use_their_models_and_water_patch():
+    builder = entity_setup()
+
+    def build(kind: str, yaw: float = 0.0):
+        region = _region([AIR], [0], (1, 1, 1))
+        region.entities = [
+            {"id": f"minecraft:{kind}", "Pos": [0.5, 0.0, 0.5], "Rotation": [yaw, 0.0]}
+        ]
+        return builder.build(_doc([region], (1, 1, 1)))
+
+    boat = build("oak_boat")
+    assert boat.quad_count == 60  # casco (54) + lámina de agua (6)
+    texture = boat.atlas.sprite("minecraft:entity/boat/oak")
+    assert texture is not None
+    assert np.all(_sprites_of(boat, texture))
+    assert boat.positions[:, 1].min() == pytest.approx(0.0, abs=1e-3)
+    assert boat.positions[:, 1].max() == pytest.approx(0.8836, abs=1e-3)
+
+    # Con giro de 90° el eje largo del bote pasa de X a Z.
+    turned = build("oak_boat", yaw=90.0)
+    assert turned.positions[:, 0].max() - turned.positions[:, 0].min() == pytest.approx(2.0)
+    assert turned.positions[:, 2].max() - turned.positions[:, 2].min() == pytest.approx(3.0)
+
+    chest_boat = build("oak_chest_boat")
+    assert chest_boat.quad_count == 78  # el cofre va incluido en su capa
+    assert chest_boat.atlas.sprite("minecraft:entity/chest_boat/oak") is not None
+
+
+@pytest.mark.parametrize(
+    ("kind", "quads"),
+    [
+        ("minecart", 30),
+        ("chest_minecart", 48),  # casco + cofre (modelo de entidad)
+        ("hopper_minecart", 36),
+        ("furnace_minecart", 36),
+        ("tnt_minecart", 36),
+        ("command_block_minecart", 36),
+        ("spawner_minecart", 36),
+    ],
+)
+def test_minecart_body_and_variant_contents(kind, quads):
+    builder = entity_setup()
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [{"id": f"minecraft:{kind}", "Pos": [0.5, 0.0, 0.5], "Rotation": [0.0, 0.0]}]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == quads
+    assert 0.0 < mesh.positions[:, 1].min() <= 0.0625
+    assert mesh.positions[:, 1].max() > 0.6
+
+
+def test_item_frame_anchors_to_the_support_and_draws_its_item():
+    builder = entity_setup()
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {
+            "id": "minecraft:item_frame",
+            "Pos": [0.5, 0.5, -0.03125],
+            "Facing": 2,
+            "Item": {"id": "minecraft:thing", "count": 1},
+            "ItemRotation": 0,
+        }
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    frame_texture = mesh.atlas.sprite("minecraft:block/item_frame")
+    item_texture = mesh.atlas.sprite("minecraft:item/thing")
+    assert frame_texture is not None
+    assert item_texture is not None
+    assert mesh.quad_count == 4
+    assert _sprites_of(mesh, frame_texture).sum() == 2
+    item = _quad_points(mesh, _sprites_of(mesh, item_texture))
+    assert item.shape == (8, 3)
+
+    # El marco queda pegado a la cara del bloque de apoyo (z = 0) y el objeto delante.
+    frame = _quad_points(mesh, _sprites_of(mesh, frame_texture))
+    assert frame[:, 2].min() == pytest.approx(-1.0 / 32.0)
+    assert frame[:, 2].max() == pytest.approx(0.0)
+    assert item[:, 2].max() < -1.0 / 32.0
+    # El objeto generado se dibuja a media escala y centrado en el marco.
+    assert (item[:, 0].min(), item[:, 0].max()) == pytest.approx((0.25, 0.75))
+    assert (item[:, 1].min(), item[:, 1].max()) == pytest.approx((0.25, 0.75))
+    assert {tuple(np.round(normal, 6)) for normal in mesh.normals} == {
+        (0.0, 0.0, -1.0),
+        (0.0, 0.0, 1.0),
+    }
+
+
+def test_item_frame_rotation_turns_the_item_but_not_the_frame():
+    builder = entity_setup()
+
+    def item_bounds(turns: int) -> tuple[float, float]:
+        region = _region([AIR], [0], (1, 1, 1))
+        region.entities = [
+            {
+                "id": "minecraft:item_frame",
+                "Pos": [0.5, 0.5, -0.03125],
+                "Facing": 2,
+                "Item": {"id": "minecraft:thing", "count": 1},
+                "ItemRotation": turns,
+            }
+        ]
+        mesh = builder.build(_doc([region], (1, 1, 1)))
+        texture = mesh.atlas.sprite("minecraft:item/thing")
+        assert texture is not None
+        x = _quad_points(mesh, _sprites_of(mesh, texture))[:, 0]
+        return float(x.min()), float(x.max())
+
+    assert item_bounds(0) == pytest.approx((0.25, 0.75))
+    # 45°: el cuadrado de lado 0.5 pasa a medir 0.5·√2 en cada eje.
+    assert item_bounds(1)[1] - item_bounds(1)[0] == pytest.approx(0.5 * np.sqrt(2.0))
+
+
+def test_invisible_item_frame_hides_the_frame_but_keeps_the_item():
+    builder = entity_setup()
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {
+            "id": "minecraft:item_frame",
+            "Pos": [0.5, 0.5, -0.03125],
+            "Facing": 2,
+            "Invisible": 1,
+            "Item": {"id": "minecraft:thing", "count": 1},
+        }
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 2
+    assert mesh.atlas.sprite("minecraft:item/thing") is not None
+    frame_texture = mesh.atlas.sprite("minecraft:block/item_frame")
+    assert frame_texture is not None
+    assert not _sprites_of(mesh, frame_texture).any()
+
+
+@pytest.mark.parametrize(
+    ("facing", "pos", "axis", "support", "outward"),
+    [
+        (0, [0.5, -0.03125, 0.5], 1, 0.0, -1.0),
+        (1, [0.5, 1.03125, 0.5], 1, 1.0, 1.0),
+        (2, [0.5, 0.5, -0.03125], 2, 0.0, -1.0),
+        (3, [0.5, 0.5, 1.03125], 2, 1.0, 1.0),
+        (4, [-0.03125, 0.5, 0.5], 0, 0.0, -1.0),
+        (5, [1.03125, 0.5, 0.5], 0, 1.0, 1.0),
+    ],
+)
+def test_item_frame_attaches_to_every_face(facing, pos, axis, support, outward):
+    """El marco queda pegado a la cara del apoyo y el objeto sobresale hacia fuera."""
+    builder = entity_setup()
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {
+            "id": "minecraft:item_frame",
+            "Pos": pos,
+            "Facing": facing,
+            "Item": {"id": "minecraft:thing", "count": 1},
+        }
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    frame_texture = mesh.atlas.sprite("minecraft:block/item_frame")
+    item_texture = mesh.atlas.sprite("minecraft:item/thing")
+    assert frame_texture is not None
+    assert item_texture is not None
+    frame = _quad_points(mesh, _sprites_of(mesh, frame_texture))[:, axis]
+    item = _quad_points(mesh, _sprites_of(mesh, item_texture))[:, axis]
+    if outward < 0:
+        assert frame.min() == pytest.approx(support - 1.0 / 32.0)
+        assert frame.max() == pytest.approx(support)
+        assert item.max() < support - 1.0 / 32.0
+    else:
+        assert frame.min() == pytest.approx(support)
+        assert frame.max() == pytest.approx(support + 1.0 / 32.0)
+        assert item.min() > support + 1.0 / 32.0
+
+
+def test_painting_uses_the_variant_size_and_faces_the_entity_rotation():
+    builder = entity_setup()
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {"id": "minecraft:painting", "Pos": [0.5, 0.5, 0.5], "facing": 0, "variant": "kebab"}
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 6
+    assert mesh.positions.min(axis=0) == pytest.approx([0.0, 0.0, 0.46875])
+    assert mesh.positions.max(axis=0) == pytest.approx([1.0, 1.0, 0.53125])
+    front = mesh.atlas.sprite("minecraft:painting/kebab")
+    assert front is not None
+    front_quad = _quad_points(mesh, _sprites_of(mesh, front))
+    assert np.allclose(front_quad[:, 2], 0.53125)
+    assert {tuple(np.round(normal, 6)) for normal in mesh.normals} == {
+        (-1.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, -1.0),
+        (0.0, 0.0, 1.0),
+    }
+
+
+def test_painting_size_comes_from_the_variant_data():
+    builder = entity_setup()
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {
+            "id": "minecraft:painting",
+            "Pos": [0.5, 0.5, 0.5],
+            "facing": 2,
+            "variant": "minecraft:pointer",
+        }
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 6
+    # 4x4 centrado en el ``Pos`` de la entidad.
+    assert mesh.positions.min(axis=0) == pytest.approx([-1.5, -1.5, 0.46875])
+    assert mesh.positions.max(axis=0) == pytest.approx([2.5, 2.5, 0.53125])
+
+
+def test_armor_stand_hides_arms_and_base_plate_when_asked():
+    builder = entity_setup()
+
+    def build(**extra):
+        entity = {"id": "minecraft:armor_stand", "Pos": [0.5, 0.0, 0.5]}
+        entity.update(extra)
+        region = _region([AIR], [0], (1, 1, 1))
+        region.entities = [entity]
+        return builder.build(_doc([region], (1, 1, 1)))
+
+    plain = build()
+    assert plain.quad_count == 54
+    assert plain.positions[:, 1].min() == pytest.approx(0.001, abs=1e-3)
+    assert plain.positions[:, 1].max() == pytest.approx(1.9698, abs=1e-3)
+
+    armed = build(ShowArms=1)
+    assert armed.quad_count == 66
+    assert armed.positions[:, 0].min() < plain.positions[:, 0].min()
+
+    no_plate = build(NoBasePlate=1)
+    assert no_plate.quad_count == 48
+    assert no_plate.positions[:, 1].min() > plain.positions[:, 1].min()
+
+    assert plain.atlas.sprite("minecraft:entity/armorstand/armorstand") is not None
+
+
+def test_living_entity_uses_its_layer_and_baby_variant():
+    builder = entity_setup()
+
+    def build(**extra):
+        entity = {"id": "minecraft:pig", "Pos": [0.5, 0.0, 0.5]}
+        entity.update(extra)
+        region = _region([AIR], [0], (1, 1, 1))
+        region.entities = [entity]
+        return builder.build(_doc([region], (1, 1, 1)))
+
+    adult = build()
+    assert adult.quad_count == 42
+    assert adult.positions[:, 1].min() == pytest.approx(0.0, abs=1e-3)
+    assert adult.atlas.sprite("minecraft:entity/pig/pig_temperate") is not None
+
+    baby = build(IsBaby=1)
+    assert baby.quad_count == 42
+    assert baby.positions[:, 1].max() < adult.positions[:, 1].max()
+    assert baby.atlas.sprite("minecraft:entity/pig/pig_temperate_baby") is not None
+
+
+def test_unknown_malformed_and_invisible_entities_are_ignored():
+    builder = entity_setup()
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {"id": "minecraft:not_a_creature", "Pos": [0.5, 0.0, 0.5]},
+        {"id": "minecraft:pig", "Pos": [0.5, 0.0]},  # Pos incompleto
+        {"id": "minecraft:pig", "Pos": [0.5, 0.0, 0.5], "Invisible": 1},
+        {"Pos": [0.5, 0.0, 0.5]},  # sin id
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 0
+    assert not mesh.palette
+
+
+def test_cushions_are_hidden_with_entities_disabled():
+    builder = cushion_setup("red", entities=False)
+    region = _region([AIR], [0], (1, 1, 1))
+    region.entities = [
+        {"id": "minecraft:cushion", "Pos": [0.5, 0.0, 0.5], "Rotation": [0.0, 0.0], "color": "red"}
+    ]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 0
+    assert mesh.atlas.sprite_count == 0
 
 
 def test_neighbouring_full_cubes_cull_shared_faces():

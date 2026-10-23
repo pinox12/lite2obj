@@ -216,17 +216,17 @@ def test_real_fixture_golden_counts(tmp_path):
 
     doc = litematic_module.load("tests/fixtures/store_1x4x4.litematic")
     mesh = MeshBuilder(ModelResolver(jar_resources())).build(doc)
-    assert (mesh.quad_count, mesh.vertex_count) == (262, 1048)
+    assert (mesh.quad_count, mesh.vertex_count) == (436, 1744)
     assert len(mesh.palette) == 19
-    assert mesh.atlas.sprite_count == 8
-    assert mesh.atlas.size == (128, 64)
+    assert mesh.atlas.sprite_count == 13
+    assert mesh.atlas.size == (256, 128)
 
     positions, uvs, normals, faces, _, _ = obj_geometry(mesh, ExportOptions())
-    assert (len(positions), len(uvs), len(normals), len(faces)) == (220, 74, 6, 262)
+    assert (len(positions), len(uvs), len(normals), len(faces)) == (448, 209, 6, 436)
 
     result = export_obj(mesh, tmp_path, ExportOptions(name="store"))
-    assert result.vertices == 220
-    assert result.faces == 262
+    assert result.vertices == 448
+    assert result.faces == 436
 
 
 def test_real_fixture_export_roundtrip(tmp_path):

@@ -619,7 +619,14 @@ class ModelResolver:
             raise BlockModelError(f"No se encontró el modelo {model_id!r}")
 
         parent_id = data.get("parent")
-        parent = self.model(str(parent_id)) if parent_id else None
+        # ``builtin/generated`` y ``builtin/entity`` no son ficheros: son modelos que el
+        # cliente construye en código (objetos planos y entidades). Se tratan como si no
+        # tuvieran padre para poder reutilizar la cadena de texturas y ``display``.
+        parent = (
+            self.model(str(parent_id))
+            if parent_id and not str(parent_id).startswith("builtin/")
+            else None
+        )
 
         textures: dict[str, Any] = dict(parent.textures) if parent else {}
         for name, value in (data.get("textures") or {}).items():

@@ -27,7 +27,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -44,6 +44,9 @@ from .models import (
     variant_matrix,
 )
 from .textures import DEFAULT_TINTS, Sprite, TextureAtlas, TintResolver
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .entities import EntityPlacement
 
 __all__ = [
     "FACE_CORNERS",
@@ -620,6 +623,7 @@ class MeshOptions:
     padding: int = 2
     atlas_scale: int = 1
     max_quads: int = 0  # 0 = sin límite
+    entities: bool = True
     progress: Callable[[int, int], None] | None = None
 
 
@@ -1075,30 +1079,79 @@ class MeshBuilder:
                 # Losa, escalera, valla... con ``waterlogged=true``: bloque + fluido.
                 placed[position] = self._waterlogged_state_mesh(block, fluid, position, voxels)
 
-        # Las entidades no ocupan la rejilla de bloques: se recogen aparte y se emiten al
-        # final. ``Pos`` es relativo a la esquina 1 de la selección (``Position``), que no
-        # tiene por qué coincidir con la esquina mínima de ``origin``.
-        cushions: list[tuple[tuple[float, float, float], StateMesh]] = []
-        for region in doc.regions:
-            base = region.position if region.position is not None else region.origin
-            for entity in region.entities:
-                if not _is_cushion(entity):
-                    continue
-                pos = _entity_vec3(entity, "Pos")
-                if pos is None:
-                    continue
-                yaw = _snap_cushion_yaw(_entity_yaw(entity))
-                state = self._cushion_state(_cushion_color(entity), yaw)
-                cushions.append(
-                    (
-                        (
-                            base[0] + pos[0] - origin[0],
-                            base[1] + pos[1] - origin[1],
-                            base[2] + pos[2] - origin[2],
-                        ),
-                        state,
+        # Las entidades no ocupan la rejilla de bloques. Los *block entities* (cofres,
+        # estandartes, cajas de shulker...) sustituyen al modelo de su bloque; el resto se
+        # coloca con su ``Pos``, relativo a la esquina 1 de la selección (``Position``).
+        entity_placements: list[EntityPlacement] = []
+        if options.entities:
+            from .entities import EntityPlacement, EntityRenderer
+
+            renderer = EntityRenderer(
+                self.resolver,
+                self.atlas,
+                lambda block: self.state_mesh(block).templates,
+            )
+            replaced: set[tuple[int, int, int]] = set()
+            for region in doc.regions:
+                ox, oy, oz = region.origin
+                for tile in region.tile_entities:
+                    position = (
+                        ox + int(tile.get("x", 0)),
+                        oy + int(tile.get("y", 0)),
+                        oz + int(tile.get("z", 0)),
                     )
-                )
+                    placement = renderer.tile_entity(tile, voxels.get(position), position)
+                    if placement is None:
+                        continue
+                    entity_placements.append(placement)
+                    if placement.replace_block:
+                        replaced.add(position)
+            for region in doc.regions:
+                base = region.position if region.position is not None else region.origin
+                for entity in region.entities:
+                    for placement in renderer.entity(entity):
+                        entity_placements.append(
+                            EntityPlacement(
+                                (
+                                    base[0] + placement.position[0],
+                                    base[1] + placement.position[1],
+                                    base[2] + placement.position[2],
+                                ),
+                                placement.state,
+                                placement.replace_block,
+                            )
+                        )
+            # Un cofre o un estandarte no debe dejar además el cubo de respaldo del bloque.
+            for position in replaced:
+                placed.pop(position, None)
+        for placement in entity_placements:
+            key = self.state_key(placement.state.block)
+            if key not in block_index:
+                block_index[key] = len(block_palette)
+                block_palette.append(placement.state.block)
+
+        cushions: list[tuple[tuple[float, float, float], StateMesh]] = []
+        if options.entities:
+            for region in doc.regions:
+                base = region.position if region.position is not None else region.origin
+                for entity in region.entities:
+                    if not _is_cushion(entity):
+                        continue
+                    pos = _entity_vec3(entity, "Pos")
+                    if pos is None:
+                        continue
+                    yaw = _snap_cushion_yaw(_entity_yaw(entity))
+                    state = self._cushion_state(_cushion_color(entity), yaw)
+                    cushions.append(
+                        (
+                            (
+                                base[0] + pos[0] - origin[0],
+                                base[1] + pos[1] - origin[1],
+                                base[2] + pos[2] - origin[2],
+                            ),
+                            state,
+                        )
+                    )
 
         cushion_palette_index = -1
         if cushions:
@@ -1120,13 +1173,19 @@ class MeshBuilder:
             if marker not in finalized:
                 finalized.add(marker)
                 state.finalize(self.atlas)
+        for placement in entity_placements:
+            state = placement.state
+            marker = id(state)
+            if marker not in finalized:
+                finalized.add(marker)
+                state.finalize(self.atlas)
 
         covers = {position: state.covers for position, state in placed.items()}
 
-        buffer = _Buffer(len(placed) + len(cushions))
+        buffer = _Buffer(len(placed) + len(cushions) + len(entity_placements))
         meta: list[tuple[int, int, int, int]] = []
         partial = False
-        total = len(placed) + len(cushions)
+        total = len(placed) + len(cushions) + len(entity_placements)
         limit = options.max_quads
 
         for done, (position, state) in enumerate(placed.items()):
@@ -1185,6 +1244,34 @@ class MeshBuilder:
                             int(state.sprite_ids[quad_index]),
                             int(state.alpha_modes[quad_index]),
                             cushion_palette_index,
+                        )
+                    )
+                if partial:
+                    break
+
+        if not partial:
+            entity_start = len(placed) + len(cushions)
+            for done, placement in enumerate(entity_placements, start=entity_start):
+                if options.progress is not None and done % 20000 == 0:
+                    options.progress(done, total)
+                state = placement.state
+                index = block_index[self.state_key(state.block)]
+                ex = placement.position[0] - origin[0]
+                ey = placement.position[1] - origin[1]
+                ez = placement.position[2] - origin[2]
+                for quad_index, template in enumerate(state.templates):
+                    if limit and len(meta) >= limit:
+                        partial = True
+                        break
+                    positions = template.positions + (ex, ey, ez)
+                    start = buffer.cursor
+                    buffer.add_quad(positions, state.uvs[quad_index], template.normal)
+                    meta.append(
+                        (
+                            start,
+                            int(state.sprite_ids[quad_index]),
+                            int(state.alpha_modes[quad_index]),
+                            index,
                         )
                     )
                 if partial:

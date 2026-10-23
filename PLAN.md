@@ -12,7 +12,7 @@ sin navegador.
 ## Estado (v1 funcional de punta a punta)
 
 F1–F8 están implementadas y el pipeline completo funciona: `.litematic` → modelos →
-texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 195
+texturas/atlas → malla con culling → OBJ+MTL+atlas y app de escritorio con vista 3D. 274
 tests, `ruff` y `mypy` limpios.
 
 | Fase | Estado | Nota |
@@ -20,11 +20,11 @@ tests, `ruff` y `mypy` limpios.
 | F1 Parser | ✅ | 27/27 esquemáticos; recuento exacto de bloques |
 | F2 Modelos | ✅ | **99,993 %** de cobertura de geometría (100 509 instancias; sólo falla un bloque de un mod) |
 | F3 Texturas | ✅ | 0 texturas ausentes en los 27 esquemáticos; atlas potencia de dos con relleno |
-| F4 Malla | ✅ | caras CCW con normal hacia fuera; culling contra vecino cúbico opaco |
+| F4 Malla | ✅ | caras CCW con normal hacia fuera; culling contra vecino cúbico opaco; entidades y *block entities* |
 | F5 Export OBJ | ✅ | un material con `map_Kd`/`map_d` al atlas; índices deduplicados |
 | F6 CLI | ✅ | `info`, `list`, `export` |
 | F7 App de escritorio | ✅ | PySide6 + OpenGL de Qt; órbita, capas, wireframe, captura y export desde la UI |
-| F8 Tests | ✅ | 195 tests; golden de conteos, `uvlock` documentado |
+| F8 Tests | ✅ | 274 tests; golden de conteos, `uvlock` documentado |
 
 Módulos reales (los nombres del plan cambiaron al implementar):
 
@@ -39,6 +39,9 @@ src/lite2obj/
   aliases.py     bloques renombrados
   textures.py    atlas, sprites teñidos, transparencia
   mesh.py        malla y culling
+  entities.py    entidades y block entities (modelos ModelPart horneados)
+  items.py       modelos de objeto (marcos, objetos tirados)
+  entity_models.json / entity_textures.json  instantánea de modelos y texturas de entidad
   export.py      OBJ + MTL + atlas        (el plan decía export_obj.py)
   pipeline.py    alto nivel CLI/app + búfer binario del visor
   cli.py         lite2obj info|list|export|gui
@@ -64,7 +67,12 @@ Desviaciones respecto al plan:
 - **Caras coincidentes**: si dos caras del *mismo* bloque comparten plano (la hierba y su
   *overlay* lateral), se hornean en una sola textura y una sola cara; así Blender y el visor
   enseñan lo mismo. Entre bloques distintos no se tocan (Minecraft también dibuja las dos).
-- **Entidades y `Items` de cofres**: fuera de v1, como estaba previsto.
+- **Entidades**: se añadió una capa propia (`entities.py`) porque los modelos de entidad no
+  están en `assets/.../models` sino en clases Java. Una instantánea de los árboles
+  `ModelPart` se empaqueta en `entity_models.json` y las matrices de colocación copian a
+  vanilla. Los objetos de marcos y entidades `item` se resuelven con `items/<id>.json`
+  (`items.py`); el inventario de cofres y otros contenedores sigue fuera de alcance, aunque
+  el bloque que llevan las vagonetas sí se dibuja.
 - **Tintes**: se aplican multiplicando la textura (sprites teñidos dentro del atlas), en vez
   de colores por vértice, para que el color viaje en el OBJ sin nada extra.
 
@@ -134,6 +142,8 @@ lite2obj/
 │   ├── models.py           # blockstate: variants/multipart, parents, rotaciones
 │   ├── textures.py         # PNG->RGBA, atlas, animacion (1er frame), tint
 │   ├── mesh.py             # voxel->geometria, culling por cullface, UVs al atlas
+│   ├── entities.py         # entidades y block entities, matrices/poses de vanilla
+│   ├── items.py            # modelos de objeto (items/<id>.json)
 │   ├── export.py           # OBJ + MTL + atlas.png
 │   ├── pipeline.py         # alto nivel CLI/app + bufer binario del visor
 │   ├── cli.py              # lite2obj info|list|export|gui
@@ -221,6 +231,10 @@ Notas:
 - **Culling por `cullface`**: si el vecino es cubo completo opaco, se omite la cara
   (lo que hacia j-mc-2-obj). Deteccion de oclusor cacheada por `id+propiedades`;
   tratamiento de transparentes/translucidos.
+- **Entidades y *block entities***: cofres, estandartes, cajas de shulker, macetas,
+  calaveras, conductos, campanas, marcos con objeto, cuadros, soportes de armadura,
+  objetos tirados, proyectiles y criaturas. Los *block entities* sustituyen al modelo de su
+  bloque y el resto se coloca con su `Pos`.
 - **DoD**: la casa de ejemplo pierde >50% de caras internas y renderiza sin huecos.
 
 ### F5 · Export a Blender
@@ -258,7 +272,7 @@ Notas:
 | Pack 1.20.1 != juego 26.3 | Fallback por-asset a vanilla (comportamiento nativo de MC) |
 | OBJ gigante en builds grandes | Culling + `--grouping`; greedy meshing como fase futura |
 | Sin datos de bioma en `.litematic` | Tints fijos conmutables |
-| Entidades e `Items` dentro de cofres | Fuera de v1; fase posterior opcional |
+| Contenido de cofres y otros contenedores | Fuera de alcance: un cofre cerrado no enseña su inventario |
 | Cambios de formato de modelos en 26.3 | Verificado: formato clasico intacto |
 
 ---

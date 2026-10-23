@@ -54,6 +54,7 @@ class RenderOptions:
     atlas_scale: int = 1
     max_quads: int = 0
     fallback_mode: str = "cube"
+    entities: bool = True
 
     def mesh_options(self) -> MeshOptions:
         return MeshOptions(
@@ -63,6 +64,7 @@ class RenderOptions:
             atlas_scale=self.atlas_scale,
             max_quads=self.max_quads,
             fallback_mode=self.fallback_mode,
+            entities=self.entities,
         )
 
 

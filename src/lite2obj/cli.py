@@ -92,6 +92,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         cull=not args.no_cull,
         tint=not args.no_tint,
         atlas_scale=args.atlas_scale,
+        entities=not args.no_entities,
     )
     result = export(
         args.path,
@@ -157,6 +158,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export.add_argument("--no-cull", action="store_true", help="no descarta caras ocultas")
     export.add_argument("--no-tint", action="store_true", help="desactiva los tintes de bioma")
+    export.add_argument(
+        "--no-entities",
+        action="store_true",
+        help="no dibuja entidades ni *block entities* (cofres, marcos, cuadros...)",
+    )
     export.add_argument(
         "--atlas-scale",
         type=int,

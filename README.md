@@ -12,11 +12,11 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F1 | Parser `.litematic` (NBT + bit-packing YZX) | ✅ hecho |
 | F2 | Resolución de blockstates/modelos desde el client jar | ✅ hecho |
 | F3 | Texturas y atlas | ✅ hecho |
-| F4 | Malla, culling por `cullface` y entidades (cojines) | ✅ hecho |
+| F4 | Malla, culling por `cullface`, entidades y *block entities* | ✅ hecho |
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 237 tests |
+| F8 | Tests | ✅ 274 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -47,6 +47,8 @@ uv run lite2obj export esquema.litematic salida/ --name casa
 uv run lite2obj export esquema.litematic salida/ --z-up --group-by block
 uv run lite2obj export esquema.litematic salida/ --packs "Mizunos 16 Craft JE_1.20.1-1.0_230720"
 uv run lite2obj export esquema.litematic salida/ --atlas-scale 2 --scale 0.5
+# Sólo bloques, sin entidades ni block entities
+uv run lite2obj export esquema.litematic salida/ --no-entities
 
 # Abre la aplicación de escritorio
 uv run lite2obj gui
@@ -132,16 +134,34 @@ Notas de fidelidad:
   encima el bloque se llena hasta `1`. Los bloques *waterlogged* (losas, escaleras, vallas,
   plantas…) conservan su geometría y además dibujan el agua que contienen; sus caras de
   fluido se marcan aparte para que el descarte entre fluidos no borre el canto del bloque.
-  Como `FluidRenderer`, las caras laterales se meten `0.001` hacia dentro y la superficie y
-  el fondo se desplazan `0.001`: así el agua no queda coplanaria con la losa o escalera que
-  la aloja y Blender no descarta una de las dos caras.
+  La superficie y el fondo se desplazan `0.001`, como `FluidRenderer`. Las caras laterales se
+  meten `0.02` hacia dentro en vez de `0.001`: en esquemas grandes la precisión del búfer de
+  profundidad de Blender/OpenGL no distingue un margen tan pequeño y el agua se solapa con el
+  cristal contiguo (una cara se parte en triángulos con una textura y otra). `0.02` es 1/50
+  de bloque, invisible, pero deja el agua claramente detrás del cristal y de la losa que la
+  aloja.
+- **Entidades y *block entities***: además de la rejilla se dibujan los cofres (simples,
+  dobles, atrapados, de ender y de cobre), estandartes, cajas de shulker, macetas decoradas,
+  calaveras, conductos, campanas, marcos de objeto (con su objeto y su giro), cuadros,
+  soportes de armadura, objetos tirados, flechas/tridentes, barcos y balsas (también con
+  cofre), vagonetas (con el bloque que llevan: cofre, tolva, horno, TNT, bloque de comandos
+  o generador) y las criaturas. Los modelos de
+  entidad no están en `assets/.../models`, sino en clases Java, así que se incluyen ya
+  horneados en `entity_models.json`; `entity_textures.json` guarda la textura de cada capa.
+  La colocación copia las matrices de vanilla (`LivingEntityRenderer`, `ChestRenderer`,
+  `ItemFrameRenderer`…), incluyendo bebés, variantes de color y las poses NBT del soporte de
+  armadura. Los objetos de los marcos se resuelven con el árbol `items/<id>.json` y las
+  transformaciones `display.fixed` del modelo. `--no-entities` (o la casilla *Dibujar
+  entidades* de la app) deja sólo los bloques.
+  Limitaciones: no se dibujan armaduras ni equipación, los patrones de estandarte no se
+  guardan en los esquemáticos escaneados y los modelos de objeto con renderer especial
+  (`special`) se omiten. Los cuadros usan el `variant` del NBT y caen a `kebab` si falta.
 - **Entidades cojín**: `minecraft:cushion` no es un bloque, sino una entidad que Litematica
   guarda en `Region.Entities`. Se renderiza con la geometría real de `CushionModel`
   (caja de `1 x 0.25 x 1`, `CubeDeformation(-0.005)`), su textura
   `entity/cushion/<color>_cushion.png` y el giro de `CushionRenderer`. `Pos` se interpreta
   relativo a la esquina 1 de la selección (`Position`), no a la esquina mínima del recorte.
-  Así aparecen tanto en el visor como en el OBJ. Las demás entidades del esquemático todavía
-  se ignoran.
+  Así aparecen tanto en el visor como en el OBJ.
 - **`uvlock`**: implementado como Minecraft. Antes de aplicar el giro del variant se giran las
   UV absolutas alrededor del centro de la textura (píxel `8,8`), así que la textura no gira con
   el bloque. Es lo que mantiene derecha la contrahuella de las escaleras boca abajo
@@ -163,8 +183,8 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
 - **Resource packs**: lista con casillas; arriba tiene más prioridad y los assets que falten
   caen al vanilla.
 - **Vista y render**: descartar caras ocultas, *backface culling* como Minecraft, tintes de
-  bioma, resolución del atlas (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y
-  corte por capas Y.
+  bioma, entidades y *block entities*, resolución del atlas (×1/×2/×4), texturas suavizadas,
+  rejilla, ejes, wireframe y corte por capas Y.
 - **Exportar a Blender**: carpeta, nombre, agrupación, escala y `Z arriba` (nativo de Blender).
 
 La vista 3D se renderiza con el OpenGL nativo de Qt (PySide6), no con el navegador: órbita con
@@ -209,7 +229,10 @@ src/lite2obj/
   fallbacks.py   geometría sustituta (fluidos, bloques de entidad)
   aliases.py     bloques renombrados entre versiones
   textures.py    atlas de texturas, sprites teñidos
-  mesh.py        malla del esquemático (caras, UV, culling, entidades)
+  mesh.py        malla del esquemático (caras, UV, culling, fluidos)
+  entities.py    entidades y block entities (matrices y poses de vanilla)
+  items.py       modelos de objeto para marcos y objetos tirados
+  entity_models.json / entity_textures.json  instantánea de modelos de entidad
   export.py      OBJ + MTL + atlas
   pipeline.py    alto nivel (CLI y app) + búfer binario del visor
   cli.py         interfaz de línea de comandos
@@ -219,7 +242,7 @@ tests/
   test_litematic.py           bit-packing, tamaños negativos, multi-región, fixture real
   test_models.py              rotaciones, variants/multipart, parent, texturas
   test_textures.py            empaquetado del atlas, tintes, transparencia
-  test_mesh.py                orientación de caras/UV, culling, malla real
+  test_mesh.py                orientación de caras/UV, culling, entidades, malla real
   test_export.py              OBJ/MTL, winding, deduplicado, agrupación
   test_gui.py                 cámara, buffers del viewport y arranque offscreen
   test_cli.py                 comandos de la CLI
