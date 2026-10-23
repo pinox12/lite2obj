@@ -238,6 +238,16 @@ class MainWindow(QMainWindow):
         packs_layout.addLayout(pack_row)
         layout.addWidget(packs_group)
 
+        self.dirty_label = QLabel("Hay cambios sin aplicar. Pulsa Renderizar (F5).")
+        self.dirty_label.setObjectName("warning")
+        self.dirty_label.setWordWrap(True)
+        self.dirty_label.hide()
+        packs_layout.addWidget(self.dirty_label)
+
+        self.render_button = QPushButton("Renderizar")
+        self.render_button.setToolTip("Vuelve a generar la malla con las opciones actuales (F5)")
+        packs_layout.addWidget(self.render_button)
+
         # Vista
         view_group = QGroupBox("Vista y render")
         view_layout = QVBoxLayout(view_group)
@@ -246,24 +256,19 @@ class MainWindow(QMainWindow):
         self.cull_check.setToolTip("Activa el culling por cullface del modelo")
         self.tint_check = QCheckBox("Teñir biomas (plains)")
         self.tint_check.setChecked(True)
-        self.entities_check = QCheckBox("Dibujar entidades")
-        self.entities_check.setChecked(True)
-        self.entities_check.setToolTip("Cofres, marcos de objeto, cuadros, barcos...")
         self.mobs_check = QCheckBox("Dibujar mobs")
         self.mobs_check.setChecked(False)
         self.mobs_check.setToolTip("Criaturas como cerdos, aldeanos o monstruos (desactivado)")
-        self.mobs_check.setEnabled(self.entities_check.isChecked())
         self.smooth_check = QCheckBox("Suavizar texturas")
         self.smooth_check.setToolTip("Filtrado lineal con mipmaps en el visor")
         self.grid_check = QCheckBox("Mostrar rejilla")
-        self.grid_check.setChecked(True)
+        self.grid_check.setChecked(False)
         self.axes_check = QCheckBox("Mostrar ejes")
         self.axes_check.setChecked(True)
         self.wire_check = QCheckBox("Wireframe")
         for widget in (
             self.cull_check,
             self.tint_check,
-            self.entities_check,
             self.mobs_check,
             self.smooth_check,
             self.grid_check,
@@ -295,18 +300,11 @@ class MainWindow(QMainWindow):
         view_layout.addWidget(self.layer_label)
 
         colors_row = QHBoxLayout()
-        self.bg_button = QPushButton("Color de fondo…")
+        self.bg_button = QPushButton("Color de fondo")
         colors_row.addWidget(self.bg_button)
         colors_row.addStretch(1)
         view_layout.addLayout(colors_row)
 
-        self.render_button = QPushButton("Renderizar")
-        self.render_button.setToolTip("Vuelve a generar la malla con las opciones actuales (F5)")
-        view_layout.addWidget(self.render_button)
-        self.dirty_label = QLabel("")
-        self.dirty_label.setObjectName("warning")
-        self.dirty_label.setWordWrap(True)
-        view_layout.addWidget(self.dirty_label)
         layout.addWidget(view_group)
 
         # Exportación
@@ -326,6 +324,7 @@ class MainWindow(QMainWindow):
         self.group_combo.addItem("Ninguna", "none")
         self.group_combo.addItem("Por bloque", "block")
         self.group_combo.addItem("Por transparencia", "alpha")
+        self.group_combo.setCurrentIndex(1)
         export_layout.addRow("Agrupar", self.group_combo)
         self.scale_spin = QDoubleSpinBox()
         self.scale_spin.setRange(0.01, 1000.0)
@@ -455,12 +454,10 @@ class MainWindow(QMainWindow):
         self.pack_down.clicked.connect(lambda: self._move_pack(1))
         self.pack_list.itemChanged.connect(self._pack_changed)
 
-        self.cull_check.toggled.connect(self._invalidate)
-        self.tint_check.toggled.connect(self._invalidate)
-        self.entities_check.toggled.connect(self._invalidate)
-        self.entities_check.toggled.connect(self.mobs_check.setEnabled)
-        self.mobs_check.toggled.connect(self._invalidate)
-        self.atlas_scale_combo.currentIndexChanged.connect(self._invalidate)
+        self.cull_check.toggled.connect(lambda: self.render_mesh())
+        self.tint_check.toggled.connect(lambda: self.render_mesh())
+        self.mobs_check.toggled.connect(lambda: self.render_mesh())
+        self.atlas_scale_combo.currentIndexChanged.connect(lambda: self.render_mesh())
         self.smooth_check.toggled.connect(self.viewport.set_smooth)
         self.smooth_check.toggled.connect(self.smooth_action.setChecked)
 
@@ -632,7 +629,7 @@ class MainWindow(QMainWindow):
             cull=self.cull_check.isChecked(),
             tint=self.tint_check.isChecked(),
             atlas_scale=int(self.atlas_scale_combo.currentData()),
-            entities=self.entities_check.isChecked(),
+            entities=True,
             mobs=self.mobs_check.isChecked(),
         )
 
@@ -643,7 +640,7 @@ class MainWindow(QMainWindow):
             self.cull_check.isChecked(),
             self.tint_check.isChecked(),
             int(self.atlas_scale_combo.currentData()),
-            self.entities_check.isChecked(),
+            True,
             self.mobs_check.isChecked(),
         )
 
@@ -681,9 +678,12 @@ class MainWindow(QMainWindow):
         self._update_stats(mesh)
         current = self._render_key()
         self._dirty = current != self._mesh_key
-        self.dirty_label.setText(
-            "Hay cambios sin aplicar. Pulsa Renderizar (F5)." if self._dirty else ""
-        )
+
+        if self._dirty:
+            self.dirty_label.show()
+        else:
+            self.dirty_label.hide()
+
         self._resources = mesh.atlas.resources
         if self._task_key is not None:
             self._resources_key = tuple(self._task_key[1])
@@ -712,7 +712,7 @@ class MainWindow(QMainWindow):
         if self.path is None:
             return
         self._dirty = True
-        self.dirty_label.setText("Hay cambios sin aplicar. Pulsa Renderizar (F5).")
+        self.dirty_label.show()
         if not self._busy:
             self.status_label.setText("Opciones cambiadas")
 
