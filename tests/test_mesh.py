@@ -594,6 +594,23 @@ def entity_setup(**options) -> MeshBuilder:
         blockstate_path("minecraft:white_shulker_box"): {
             "variants": {"": {"model": "test:block/empty"}}
         },
+        blockstate_path("minecraft:skeleton_skull"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
+        blockstate_path("minecraft:skeleton_wall_skull"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
+        blockstate_path("minecraft:creeper_head"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
+        blockstate_path("minecraft:creeper_wall_head"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
+        blockstate_path("minecraft:dragon_head"): {"variants": {"": {"model": "test:block/empty"}}},
+        blockstate_path("minecraft:dragon_wall_head"): {
+            "variants": {"": {"model": "test:block/empty"}}
+        },
+        blockstate_path("minecraft:piston_head"): {"variants": {"": {"model": "test:block/empty"}}},
         blockstate_path("minecraft:hopper"): {"variants": {"": {"model": "test:block/contents"}}},
         blockstate_path("minecraft:furnace"): {"variants": {"": {"model": "test:block/contents"}}},
         blockstate_path("minecraft:tnt"): {"variants": {"": {"model": "test:block/contents"}}},
@@ -616,6 +633,9 @@ def entity_setup(**options) -> MeshBuilder:
         texture_path("minecraft:entity/banner/base"): make_png(),
         texture_path("minecraft:entity/shulker/shulker"): make_png(),
         texture_path("minecraft:entity/shulker/shulker_white"): make_png(),
+        texture_path("minecraft:entity/skeleton/skeleton"): make_png(),
+        texture_path("minecraft:entity/creeper/creeper"): make_png(),
+        texture_path("minecraft:entity/enderdragon/dragon"): make_png(),
         texture_path("minecraft:item/thing"): make_png(color=(255, 0, 0, 255)),
         items_model_path("minecraft:thing"): {
             "model": {"type": "minecraft:model", "model": "minecraft:item/thing"}
@@ -697,6 +717,86 @@ def test_chest_block_keeps_its_model_with_entities_disabled():
 
     # El cubo sintético del bloque, sin la geometría del cofre.
     assert mesh.quad_count == 6
+
+
+def test_skull_without_tile_entity_uses_its_entity_model():
+    """El `.litematic` puede no guardar ``TileEntities``; el blockstate basta."""
+    builder = entity_setup()
+    skull = BlockState("minecraft:skeleton_skull", (("powered", "false"), ("rotation", "0")))
+    region = _region([AIR, skull], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    texture = mesh.atlas.sprite("minecraft:entity/skeleton/skeleton")
+    assert texture is not None
+    assert _sprites_of(mesh, texture).all()
+    assert mesh.quad_count == 6
+    # La calavera mide media altura y está centrada, no es el cubo de respaldo.
+    assert mesh.positions[:, 0].min() == pytest.approx(0.25)
+    assert mesh.positions[:, 0].max() == pytest.approx(0.75)
+    assert mesh.positions[:, 1].min() == pytest.approx(0.0)
+    assert mesh.positions[:, 1].max() == pytest.approx(0.5)
+
+
+def test_wall_skull_without_tile_entity_uses_wall_anchor():
+    builder = entity_setup()
+    skull = BlockState("minecraft:skeleton_wall_skull", (("facing", "north"), ("powered", "false")))
+    region = _region([AIR, skull], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    # La calavera de pared va pegada al sur y subida 4 píxeles, como vanilla.
+    assert mesh.positions[:, 1].min() == pytest.approx(0.25)
+    assert mesh.positions[:, 1].max() == pytest.approx(0.75)
+    assert mesh.positions[:, 2].min() == pytest.approx(0.5)
+    assert mesh.positions[:, 2].max() == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    ("block", "texture", "width"),
+    [
+        ("minecraft:creeper_head", "minecraft:entity/creeper/creeper", 0.5),
+        ("minecraft:dragon_head", "minecraft:entity/enderdragon/dragon", 0.75),
+    ],
+)
+def test_other_heads_use_their_entity_texture(block, texture, width):
+    builder = entity_setup()
+    skull = BlockState(block, (("powered", "false"), ("rotation", "0")))
+    region = _region([AIR, skull], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    sprite = mesh.atlas.sprite(texture)
+    assert sprite is not None
+    assert _sprites_of(mesh, sprite).all()
+    assert mesh.positions[:, 0].max() - mesh.positions[:, 0].min() == pytest.approx(width)
+
+
+def test_skull_with_tile_entity_is_not_duplicated():
+    builder = entity_setup()
+    skull = BlockState("minecraft:skeleton_skull", (("powered", "false"), ("rotation", "0")))
+    region = _region([AIR, skull], [1], (1, 1, 1))
+    region.tile_entities = [{"id": "minecraft:skeleton_skull", "x": 0, "y": 0, "z": 0}]
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 6
+
+
+def test_piston_head_is_not_treated_as_skull():
+    builder = entity_setup()
+    piston = BlockState(
+        "minecraft:piston_head", (("facing", "north"), ("short", "false"), ("type", "normal"))
+    )
+    region = _region([AIR, piston], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.atlas.sprite("minecraft:entity/skeleton/skeleton") is None
+
+
+def test_skull_is_not_synthesized_with_entities_disabled():
+    builder = entity_setup(entities=False)
+    skull = BlockState("minecraft:skeleton_skull", (("powered", "false"), ("rotation", "0")))
+    region = _region([AIR, skull], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.atlas.sprite("minecraft:entity/skeleton/skeleton") is None
 
 
 def test_banner_parses_two_word_colors_and_tints_the_flag():

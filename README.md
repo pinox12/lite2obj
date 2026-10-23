@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 282 tests |
+| F8 | Tests | ✅ 289 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -156,7 +156,9 @@ Notas de fidelidad:
   transformaciones `display.fixed` del modelo. Las criaturas están **desactivadas por
   defecto**: `--mobs` (o la casilla *Dibujar mobs* de la app) las añade. `--no-entities` (o
   la casilla *Dibujar entidades*) deja sólo los bloques y sigue apagando también las
-  criaturas.
+  criaturas. Las calaveras y cabezas se reconstruyen desde su blockstate cuando el
+  `.litematic` no trae `TileEntities`; el modelo `block/skull` no tiene geometría y sin
+  esto se veía el cubo de respaldo con la textura de partículas.
   Limitaciones: no se dibujan armaduras ni equipación, los patrones de estandarte no se
   guardan en los esquemáticos escaneados y los modelos de objeto con renderer especial
   (`special`) se omiten. Los cuadros usan el `variant` del NBT y caen a `kebab` si falta.

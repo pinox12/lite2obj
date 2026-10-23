@@ -329,6 +329,18 @@ def _path(value: str) -> str:
     return str(value).split(":")[-1]
 
 
+def _is_skull_path(path: str) -> bool:
+    """Cierto para calaveras y cabezas colocadas; excluye ``piston_head``."""
+    if path == "piston_head" or path.startswith("potted"):
+        return False
+    return "skull" in path or path.endswith("_head")
+
+
+def is_skull_block(block: BlockState | None) -> bool:
+    """Cierto si el bloque es una calavera o una cabeza colocada."""
+    return block is not None and _is_skull_path(block.path)
+
+
 def _entity_id(entity: dict[str, Any]) -> str:
     return _path(str(entity.get("id", "")))
 
@@ -504,7 +516,7 @@ class EntityRenderer:
             return self._conduit(anchor)
         if path == "bell":
             return self._bell(anchor)
-        if ("skull" in path or path.endswith("_head")) and not path.startswith("potted"):
+        if _is_skull_path(path):
             return self._skull(block, anchor)
         return None
 

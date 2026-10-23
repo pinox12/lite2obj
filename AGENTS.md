@@ -105,6 +105,10 @@ Pipeline order, each layer assuming the previous:
     only the `_living()` fallthrough. Boats, minecarts, frames, paintings, armor stands,
     items and projectiles are resolved before that point and are unaffected. `entities=False`
     still removes every entity, block entity and cushion.
+  - A placed skull/head always has a block entity in vanilla, but some `.litematic` files
+    have an empty `TileEntities`. `MeshBuilder` synthesizes it from the blockstate;
+    `block/skull` has no elements, so otherwise the fallback cube uses the particle texture.
+    `_is_skull_path` must keep excluding `piston_head`.
   - `MeshBuilder.build()` calls `atlas.build()` and only then finalizes state UVs.
     Sprites are registered while building state templates; don't finalize before packing.
 - Atlas: power-of-two, shelf-packed, 2 px padding, alpha modes 0/1/2
