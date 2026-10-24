@@ -625,6 +625,7 @@ class MeshOptions:
     max_quads: int = 0  # 0 = sin límite
     entities: bool = True
     mobs: bool = False
+    droped_items: bool = False
     progress: Callable[[int, int], None] | None = None
 
 
@@ -1196,6 +1197,7 @@ class MeshBuilder:
                 self.atlas,
                 lambda block: self.state_mesh(block).templates,
                 mobs=options.mobs,
+                droped_items=options.droped_items
             )
             replaced: set[tuple[int, int, int]] = set()
             handled: set[tuple[int, int, int]] = set()

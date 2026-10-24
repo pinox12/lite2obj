@@ -412,11 +412,13 @@ class EntityRenderer:
         state_templates: Callable[[BlockState], tuple[_mesh.QuadTemplate, ...]],
         *,
         mobs: bool = False,
+        droped_items: bool = False,
     ) -> None:
         self.resolver = resolver
         self.atlas = atlas
         self.state_templates = state_templates
         self.mobs = mobs
+        self.droped_items = droped_items
         self.items = ItemRenderer(resolver, atlas)
 
     # -- construcción de plantillas --------------------------------------- #
@@ -718,37 +720,49 @@ class EntityRenderer:
         kind = _entity_id(entity)
         if not kind:
             return []
+        
         if kind == "cushion":
             # ``mesh.MeshBuilder`` dibuja los cojines con su modelo y su color; aquí se
             # ignoran para no duplicarlos.
             return []
+        
         if kind in ("item_frame", "glow_item_frame"):
             # Un marco invisible oculta el marco, pero no el objeto que muestra (es el
             # truco habitual para dejar objetos flotando).
             placement = self._item_frame(entity, kind == "glow_item_frame")
             return [placement] if placement is not None else []
+        
         if entity.get("Invisible"):
             return []
+        
         if kind == "painting":
             placement = self._painting(entity)
             return [placement] if placement is not None else []
+        
         if kind == "armor_stand":
             return self._armor_stand(entity)
+        
         if kind == "item":
+            if not self.droped_items:
+                return []
             placement = self._dropped_item(entity)
             return [placement] if placement is not None else []
+        
         if kind in ("arrow", "spectral_arrow", "wind_charge", "trident"):
             placement = self._projectile(entity, kind)
             return [placement] if placement is not None else []
+        
         base = _ENTITY_LAYERS.get(kind, kind)
         if base.startswith(("boat/", "chest_boat/")):
             return self._boat(entity, base)
         if kind == "minecart" or kind.endswith("_minecart"):
             return self._minecart(entity, kind)
+        
         # Todo lo que llega aquí es una criatura: botes, vagonetas, marcos, cuadros,
         # soportes de armadura, objetos y proyectiles ya se han resuelto antes. Las
         # criaturas están desactivadas por defecto para que el esquemático muestre sólo
         # la construcción salvo que se pidan explícitamente.
+        
         if not self.mobs:
             return []
         return self._living(entity, kind)

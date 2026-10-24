@@ -56,6 +56,7 @@ class RenderOptions:
     fallback_mode: str = "cube"
     entities: bool = True
     mobs: bool = False
+    droped_items: bool = False
 
     def mesh_options(self) -> MeshOptions:
         return MeshOptions(
@@ -67,6 +68,7 @@ class RenderOptions:
             fallback_mode=self.fallback_mode,
             entities=self.entities,
             mobs=self.mobs,
+            droped_items=self.droped_items,
         )
 
 

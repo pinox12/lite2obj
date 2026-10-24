@@ -259,10 +259,13 @@ class MainWindow(QMainWindow):
         self.mobs_check = QCheckBox("Dibujar mobs")
         self.mobs_check.setChecked(False)
         self.mobs_check.setToolTip("Criaturas como cerdos, aldeanos o monstruos (desactivado)")
+        self.droped_items_check = QCheckBox("Dibujar items caídos")
+        self.droped_items_check.setChecked(False)
+        self.droped_items_check.setToolTip("Items caídos en el suelo (desactivado)")
         self.smooth_check = QCheckBox("Suavizar texturas")
         self.smooth_check.setToolTip("Filtrado lineal con mipmaps en el visor")
         self.grid_check = QCheckBox("Mostrar rejilla")
-        self.grid_check.setChecked(False)
+        self.grid_check.setChecked(True)
         self.axes_check = QCheckBox("Mostrar ejes")
         self.axes_check.setChecked(True)
         self.wire_check = QCheckBox("Wireframe")
@@ -270,6 +273,7 @@ class MainWindow(QMainWindow):
             self.cull_check,
             self.tint_check,
             self.mobs_check,
+            self.droped_items_check,
             self.smooth_check,
             self.grid_check,
             self.axes_check,
@@ -311,7 +315,8 @@ class MainWindow(QMainWindow):
         export_group = QGroupBox("Exportar a Blender")
         export_layout = QFormLayout(export_group)
         self.out_dir = QLineEdit()
-        self.out_dir.setText(str(self.settings.value("out_dir", str(Path.home() / "lite2obj_out"))))
+        # self.out_dir.setText(str(self.settings.value("out_dir", str(Path.home() / "lite2obj_out"))))
+        self.out_dir.setText(str(self.app_dir() / "lite2obj_out"))
         dir_row = QHBoxLayout()
         dir_row.addWidget(self.out_dir, 1)
         self.out_dir_button = QPushButton("…")
@@ -351,6 +356,20 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
         scroll.setWidget(inner)
         return scroll
+
+    def app_dir(self) -> Path:
+        """Carpeta donde está el .AppImage, el .exe o el script."""
+        # AppImage: ruta real del archivo .AppImage
+        appimage = os.environ.get("APPIMAGE")
+        if appimage:
+            return Path(appimage).resolve().parent
+
+        # Ejecutable congelado (PyInstaller): carpeta del .exe
+        if getattr(sys, "frozen", False):
+            return Path(sys.executable).resolve().parent
+
+        # Desarrollo: carpeta del .py
+        return Path(__file__).resolve().parent
 
     def _build_actions(self) -> None:
         self.open_action = QAction("Abrir esquemático…", self)
@@ -457,6 +476,7 @@ class MainWindow(QMainWindow):
         self.cull_check.toggled.connect(lambda: self.render_mesh())
         self.tint_check.toggled.connect(lambda: self.render_mesh())
         self.mobs_check.toggled.connect(lambda: self.render_mesh())
+        self.droped_items_check.toggled.connect(lambda: self.render_mesh())
         self.atlas_scale_combo.currentIndexChanged.connect(lambda: self.render_mesh())
         self.smooth_check.toggled.connect(self.viewport.set_smooth)
         self.smooth_check.toggled.connect(self.smooth_action.setChecked)
@@ -631,6 +651,7 @@ class MainWindow(QMainWindow):
             atlas_scale=int(self.atlas_scale_combo.currentData()),
             entities=True,
             mobs=self.mobs_check.isChecked(),
+            droped_items=self.droped_items_check.isChecked(),
         )
 
     def _render_key(self) -> tuple:
@@ -642,6 +663,7 @@ class MainWindow(QMainWindow):
             int(self.atlas_scale_combo.currentData()),
             True,
             self.mobs_check.isChecked(),
+            self.droped_items_check.isChecked(),
         )
 
     def render_mesh(self) -> None:
@@ -864,6 +886,7 @@ class MainWindow(QMainWindow):
         self.mobs_check.setChecked(True)
         self.grid_check.setChecked(False)
         self.axes_check.setChecked(False)
+        self.droped_items_check.setChecked(True)
         self.open_path(path)
 
     def _about(self) -> None:

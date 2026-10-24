@@ -94,6 +94,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         atlas_scale=args.atlas_scale,
         entities=not args.no_entities,
         mobs=args.mobs,
+        droped_items=args.droped_items
     )
     result = export(
         args.path,
@@ -168,6 +169,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--mobs",
         action="store_true",
         help="dibuja criaturas (desactivado por defecto; requiere entidades)",
+    )
+    export.add_argument(
+        "--droped-items",
+        action="store_true",
+        help="dibuja items caídos (desactivado por defecto; requiere entidades)",
     )
     export.add_argument(
         "--atlas-scale",
