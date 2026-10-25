@@ -51,6 +51,12 @@ _GL_CULL_FACE = 0x0B44
 _GL_BACK = 0x0405
 _GL_CCW = 0x0901
 
+#: Sesgo de profundidad de las líneas en espacio de recorte. Positivo las acerca a la
+#: cámara; negativo las empuja al fondo. La rejilla se aleja porque la malla ya sesga sus
+#: fragmentos +2e-5 y, al alejar la cámara, la rejilla ganaba la prueba de profundidad.
+_GRID_DEPTH_BIAS = -1e-4
+_LINE_DEPTH_BIAS = 6e-4
+
 _VERTEX = """
 #version 330 core
 layout(location = 0) in vec3 in_pos;
@@ -97,11 +103,12 @@ _LINE_VERTEX = """
 #version 330 core
 layout(location = 0) in vec3 in_pos;
 uniform mat4 u_view_proj;
+uniform float u_depth_bias;
 out vec3 v_world;
 void main() {
     v_world = in_pos;
     gl_Position = u_view_proj * vec4(in_pos, 1.0);
-    gl_Position.z -= 0.0006 * gl_Position.w;
+    gl_Position.z -= u_depth_bias * gl_Position.w;
 }
 """
 
@@ -315,7 +322,7 @@ class Viewport(QOpenGLWidget):
             }
             self._lu = {
                 name: self._line.uniformLocation(f"u_{name}")
-                for name in ("view_proj", "y_min", "y_max", "color", "clip")
+                for name in ("view_proj", "y_min", "y_max", "color", "clip", "depth_bias")
             }
             self._build_axes()
             self._build_grid((1, 1, 1))
@@ -348,15 +355,18 @@ class Viewport(QOpenGLWidget):
         self._line.setUniformValue(self._lu["view_proj"], matrix)
         self._line.setUniformValue1f(self._lu["y_min"], float(self.layer_min))
         self._line.setUniformValue1f(self._lu["y_max"], float(self.layer_max))
+        self._line.setUniformValue1f(self._lu["depth_bias"], _LINE_DEPTH_BIAS)
 
         if self.show_grid and self._grid_vao is not None:
             self._gl.glEnable(_GL_BLEND)
             self._gl.glBlendFunc(_GL_SRC_ALPHA, _GL_ONE_MINUS_SRC_ALPHA)
             self._line.setUniformValue1i(self._lu["clip"], 0)
+            self._line.setUniformValue1f(self._lu["depth_bias"], _GRID_DEPTH_BIAS)
             self._line.setUniformValue(self._lu["color"], QVector4D(0.42, 0.45, 0.50, 0.42))
             self._grid_vao.bind()
             self._gl.glDrawArrays(_GL_LINES, 0, self._grid_count)
             self._grid_vao.release()
+            self._line.setUniformValue1f(self._lu["depth_bias"], _LINE_DEPTH_BIAS)
 
         if self.show_axes:
             self._gl.glEnable(_GL_BLEND)
@@ -376,6 +386,7 @@ class Viewport(QOpenGLWidget):
                 self._line.bind()
                 self._line.setUniformValue(self._lu["view_proj"], matrix)
                 self._line.setUniformValue1i(self._lu["clip"], 1)
+                self._line.setUniformValue1f(self._lu["depth_bias"], _LINE_DEPTH_BIAS)
                 self._line.setUniformValue(self._lu["color"], QVector4D(0.02, 0.02, 0.03, 0.55))
                 self._mesh_gl.edge_vao.bind()
                 self._gl.glDrawArrays(_GL_LINES, 0, self._mesh_gl.edge_count)

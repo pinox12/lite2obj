@@ -207,3 +207,12 @@ def test_demo_schematic_exists():
     path = _demo_schematic_path()
     assert path.name == "all_blocks_and_entities.litematic"
     assert path.is_file()
+
+
+def test_line_shader_uses_a_configurable_depth_bias():
+    from lite2obj.gui.viewport import _GRID_DEPTH_BIAS, _LINE_DEPTH_BIAS, _LINE_VERTEX
+
+    assert "uniform float u_depth_bias;" in _LINE_VERTEX
+    assert "gl_Position.z -= u_depth_bias * gl_Position.w;" in _LINE_VERTEX
+    # La rejilla se empuja al fondo; ejes y wireframe se acercan para no desaparecer.
+    assert _GRID_DEPTH_BIAS < 0 < _LINE_DEPTH_BIAS
