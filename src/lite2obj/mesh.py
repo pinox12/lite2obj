@@ -1189,6 +1189,7 @@ class MeshBuilder:
                 EntityRenderer,
                 is_banner_block,
                 is_bell_block,
+                is_conduit_block,
                 is_skull_block,
             )
 
@@ -1197,7 +1198,7 @@ class MeshBuilder:
                 self.atlas,
                 lambda block: self.state_mesh(block).templates,
                 mobs=options.mobs,
-                droped_items=options.droped_items
+                droped_items=options.droped_items,
             )
             replaced: set[tuple[int, int, int]] = set()
             handled: set[tuple[int, int, int]] = set()
@@ -1222,7 +1223,10 @@ class MeshBuilder:
             # estandarte se pinta sólo el color base; los patrones quedan para más adelante.
             for position, block in voxels.items():
                 if position in handled or not (
-                    is_skull_block(block) or is_banner_block(block) or is_bell_block(block)
+                    is_skull_block(block)
+                    or is_banner_block(block)
+                    or is_bell_block(block)
+                    or is_conduit_block(block)
                 ):
                     continue
                 placement = renderer.tile_entity({}, block, position)
@@ -1248,8 +1252,20 @@ class MeshBuilder:
                             )
                         )
             # Un cofre o un estandarte no debe dejar además el cubo de respaldo del bloque.
+            # Un conduit *waterlogged* sí conserva el agua: sólo se descarta su cubo.
             for position in replaced:
-                placed.pop(position, None)
+                state = placed.get(position)
+                if state is None:
+                    continue
+                fluid_templates = tuple(template for template in state.templates if template.fluid)
+                if fluid_templates:
+                    placed[position] = StateMesh(
+                        block=state.block,
+                        templates=fluid_templates,
+                        covers=False,
+                    )
+                else:
+                    placed.pop(position, None)
         for placement in entity_placements:
             key = self.state_key(placement.state.block)
             if key not in block_index:

@@ -94,7 +94,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         atlas_scale=args.atlas_scale,
         entities=not args.no_entities,
         mobs=args.mobs,
-        droped_items=args.droped_items
+        droped_items=args.droped_items,
     )
     result = export(
         args.path,

@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 299 tests |
+| F8 | Tests | ✅ 300 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -200,6 +200,8 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
   bioma, entidades y *block entities*, criaturas (desactivadas por defecto), resolución del
   atlas (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y corte por capas Y.
 - **Exportar a Blender**: carpeta, nombre, agrupación, escala y `Z arriba` (nativo de Blender).
+- **Ayuda → Renderizar litemática de prueba**: abre `all_blocks_and_entities.litematic`, el
+  esquemático de referencia con todos los bloques, combinaciones y entidades.
 
 La vista 3D se renderiza con el OpenGL nativo de Qt (PySide6), no con el navegador: órbita con
 el botón izquierdo, desplazar con el central/derecho (o `Shift`+izquierdo), zoom con la rueda

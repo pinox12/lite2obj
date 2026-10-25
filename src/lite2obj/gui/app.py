@@ -315,7 +315,6 @@ class MainWindow(QMainWindow):
         export_group = QGroupBox("Exportar a Blender")
         export_layout = QFormLayout(export_group)
         self.out_dir = QLineEdit()
-        # self.out_dir.setText(str(self.settings.value("out_dir", str(Path.home() / "lite2obj_out"))))
         self.out_dir.setText(str(self.app_dir() / "lite2obj_out"))
         dir_row = QHBoxLayout()
         dir_row.addWidget(self.out_dir, 1)

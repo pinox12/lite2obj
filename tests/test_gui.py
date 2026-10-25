@@ -1,16 +1,11 @@
-"""Tests de la aplicación de escritorio (cámara, buffers y arranque).
+"""Tests de la aplicación de escritorio (cámara y buffers de OpenGL).
 
-La parte que necesita Qt se aísla en un subproceso con la plataforma ``offscreen``, de modo
-que la batería sigue funcionando en máquinas sin pantalla.
+La lógica de cámara y la preparación de la malla no necesitan una ventana real.
 """
 
 from __future__ import annotations
 
 import math
-import os
-import subprocess
-import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -204,3 +199,11 @@ def test_render_options_mobs_are_off_by_default():
     assert RenderOptions().mobs is False
     assert RenderOptions().mesh_options().mobs is False
     assert RenderOptions(mobs=True).mesh_options().mobs is True
+
+
+def test_demo_schematic_exists():
+    from lite2obj.gui.app import _demo_schematic_path
+
+    path = _demo_schematic_path()
+    assert path.name == "all_blocks_and_entities.litematic"
+    assert path.is_file()

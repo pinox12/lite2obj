@@ -595,6 +595,9 @@ def entity_setup(**options) -> MeshBuilder:
             "variants": {"": {"model": "test:block/empty"}}
         },
         blockstate_path("minecraft:bell"): {"variants": {"": {"model": "test:block/empty"}}},
+        blockstate_path("minecraft:conduit"): {"variants": {"": {"model": "test:block/empty"}}},
+        blockstate_path("minecraft:water"): {"variants": {"": {"model": "minecraft:block/water"}}},
+        model_path("minecraft:block/water"): {},
         blockstate_path("minecraft:white_shulker_box"): {
             "variants": {"": {"model": "test:block/empty"}}
         },
@@ -636,6 +639,11 @@ def entity_setup(**options) -> MeshBuilder:
         texture_path("minecraft:entity/banner/banner_base"): make_png(),
         texture_path("minecraft:entity/banner/base"): make_png(),
         texture_path("minecraft:entity/bell/bell_body"): make_png(),
+        texture_path("minecraft:entity/conduit/base"): make_png(),
+        texture_path("minecraft:entity/conduit/cage"): make_png(),
+        texture_path("minecraft:entity/conduit/open_eye"): make_png(),
+        texture_path("minecraft:block/water_still"): make_png(color=(174, 174, 174, 180)),
+        texture_path("minecraft:block/water_flow"): make_png(color=(174, 174, 174, 180)),
         texture_path("minecraft:entity/shulker/shulker"): make_png(),
         texture_path("minecraft:entity/shulker/shulker_white"): make_png(),
         texture_path("minecraft:entity/skeleton/skeleton"): make_png(),
@@ -863,6 +871,40 @@ def test_bell_with_tile_entity_is_not_duplicated():
     sprite = mesh.atlas.sprite("minecraft:entity/bell/bell_body")
     assert sprite is not None
     assert _sprites_of(mesh, sprite).sum() == 12
+
+
+def test_waterlogged_conduit_without_tile_entity_uses_the_entity_model():
+    """El conduit no tiene modelo de bloque: se reconstruye desde el blockstate."""
+    builder = entity_setup()
+    conduit = BlockState("minecraft:conduit", (("waterlogged", "true"),))
+    region = _region([AIR, conduit], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    for texture in (
+        "minecraft:entity/conduit/base",
+        "minecraft:entity/conduit/cage",
+        "minecraft:entity/conduit/open_eye",
+    ):
+        sprite = mesh.atlas.sprite(texture)
+        assert sprite is not None
+        assert _sprites_of(mesh, sprite).sum() > 0
+
+    # El agua del conduit waterlogged se conserva aunque el cubo de respaldo desaparezca.
+    still = mesh.atlas.sprite("minecraft:block/water_still", (0x3F, 0x76, 0xE4))
+    assert still is not None
+    assert _sprites_of(mesh, still).sum() > 0
+    waterlogged_index = next(i for i, block in enumerate(mesh.palette) if block == conduit)
+    waterlogged_quads = np.where(mesh.block == waterlogged_index)[0]
+    assert len(waterlogged_quads) == 6
+    assert np.all(mesh.alpha_mode[waterlogged_quads] == 2)
+
+    # La geometría de la entidad queda centrada y no ocupa el cubo completo del bloque.
+    entity = BlockState("minecraft:conduit")
+    entity_index = next(i for i, block in enumerate(mesh.palette) if block == entity)
+    entity_quads = np.where(mesh.block == entity_index)[0]
+    entity_points = mesh.positions[np.unique(mesh.quads[entity_quads])]
+    assert entity_points.min() > 0.1
+    assert entity_points.max() < 0.9
 
 
 def test_banner_parses_two_word_colors_and_tints_the_flag():
