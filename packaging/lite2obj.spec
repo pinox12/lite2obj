@@ -23,6 +23,12 @@ ICON = ROOT / "packaging" / ("lite2obj.ico" if sys.platform == "win32" else "lit
 datas = collect_data_files("lite2obj")
 datas.append((str(ROOT / "all_blocks_and_entities.litematic"), "."))
 
+# Si el usuario deja el archivo de assets en la raíz, se mete en el bundle para que
+# la app funcione sin Minecraft instalado. No se versiona por derechos de autor.
+asset_pack = ROOT / "lite2obj-assets.l2oassets"
+if asset_pack.is_file():
+    datas.append((str(asset_pack), "."))
+
 # ``gui/__init__.py`` importa estos módulos de forma perezosa.
 hiddenimports = [
     "lite2obj.gui.app",

@@ -13,6 +13,7 @@ uv run pytest tests/test_mesh.py::test_name    # one test
 uv run ruff format . && uv run ruff check .
 uv run mypy src                                # config already limits to src
 uv run lite2obj info|list|export|gui ...
+uv run lite2obj assets build|info
 ```
 
 There is no CI or pre-commit: run ruff, mypy and pytest yourself before committing.
@@ -28,9 +29,10 @@ Python is 3.14; dependencies live in `uv.lock` (no pip/poetry). There is no JS/N
 
 ## Tests: a green run may have tested nothing
 
-- Real-asset tests are **jar-gated**: they call `tests/_jar.py::jar_resources()`, which
-  `pytest.skip`s when no Minecraft client jar is found. A green suite on a fresh machine
-  can mean the model/texture/mesh pipeline was never exercised.
+- Real-asset tests are **asset-gated**: they call `tests/_jar.py::jar_resources()`, which
+  `pytest.skip`s when there is neither a `.l2oassets` file nor a Minecraft client jar. A
+  green suite on a fresh machine can mean the model/texture/mesh pipeline was never
+  exercised.
 - `tests/conftest.py` puts `tests/` on `sys.path`, so helpers are imported top-level:
   `from _jar import jar_resources`, `from nbt_writer import write_nbt` (not `tests._jar`).
 - Committed fixture: `tests/fixtures/store_1x4x4.litematic`.
@@ -45,8 +47,10 @@ Python is 3.14; dependencies live in `uv.lock` (no pip/poetry). There is no JS/N
 Pipeline order, each layer assuming the previous:
 `paths` → `assets` → `models` → `textures` → `mesh` → `export`/`pipeline` → `cli`/`gui`.
 
-- `assets.py` stacks the vanilla jar plus resource packs, falling back **per asset** to
-  vanilla. `LITE2OBJ_*` variables override auto-discovery (see the `paths.py` docstring).
+- `assets.py` stacks the vanilla source (`.l2oassets` if present, otherwise the client jar)
+  plus resource packs, falling back **per asset** to vanilla. `assetpack.py` builds and
+  validates the `.l2oassets` archive. `LITE2OBJ_*` variables override auto-discovery (see
+  the `paths.py` docstring).
 - `models.py` resolves blockstates (variants/multipart), parent inheritance and model/
   element rotations. Variants are chosen **per position** (`position_seed`), not once per
   state. Each multipart group contributes **one** variant; emitting all weighted variants

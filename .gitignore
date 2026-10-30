@@ -17,3 +17,6 @@ out/
 *.mtl
 *.glb
 !tests/fixtures/*.obj
+
+# Assets de Minecraft empaquetados (contenido con derechos de autor)
+*.l2oassets

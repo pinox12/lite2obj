@@ -4,6 +4,8 @@ Uso::
 
     lite2obj info <archivo.litematic> [--blocks N]
     lite2obj list
+    lite2obj assets build [--jar JAR] [--output ARCHIVO] [--force]
+    lite2obj assets info [ARCHIVO]
     lite2obj export <archivo.litematic> [destino] [--packs ...] [--z-up] [--group-by ...]
     lite2obj gui [<archivo.litematic>]
 """
@@ -14,7 +16,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, assets, litematic, paths
+from . import __version__, assetpack, assets, litematic, paths
 
 __all__ = ["main"]
 
@@ -78,8 +80,67 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     if args.packs:
         print("\nResource packs disponibles:")
-        for pack in assets.list_packs():
-            print(f"  {pack.name}  ({pack.kind})")
+        for resource_pack in assets.list_packs():
+            print(f"  {resource_pack.name}  ({resource_pack.kind})")
+
+    pack = paths.asset_pack()
+    if pack is None:
+        print("\nArchivo de assets: no generado; se usará el client jar si existe.")
+    else:
+        manifest = assetpack.read_manifest(pack) or {}
+        version = manifest.get("minecraft_version", "?")
+        print(f"\nArchivo de assets: {pack} (Minecraft {version})")
+    return 0
+
+
+def cmd_assets_build(args: argparse.Namespace) -> int:
+    jar = Path(args.jar) if args.jar is not None else paths.client_jar()
+    if jar is None:
+        print(
+            "No se encontró ningún client jar de Minecraft. "
+            "Usa --jar o define LITE2OBJ_CLIENT_JAR.",
+            file=sys.stderr,
+        )
+        return 1
+    output = Path(args.output) if args.output is not None else paths.asset_pack_output()
+    try:
+        info = assetpack.build_asset_pack(jar, output, force=args.force)
+    except (assetpack.AssetPackError, FileExistsError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Minecraft  {info.minecraft_version}")
+    print(f"Archivo    {info.path}")
+    print(f"Contenido  {info.files} archivos, {_human_bytes(info.uncompressed_bytes)}")
+    print(f"Tamaño     {_human_bytes(info.compressed_bytes)}")
+    print("\nEl programa usará este archivo automáticamente.")
+    return 0
+
+
+def cmd_assets_info(args: argparse.Namespace) -> int:
+    pack = Path(args.pack) if args.pack is not None else paths.asset_pack()
+    if pack is None:
+        print(
+            "No se encontró ningún archivo de assets. Genera uno con 'lite2obj assets build'.",
+            file=sys.stderr,
+        )
+        return 1
+    manifest = assetpack.read_manifest(pack)
+    if manifest is None:
+        print(f"El archivo no es válido: {pack}", file=sys.stderr)
+        return 1
+
+    print(f"Archivo    {pack}")
+    for key in (
+        "minecraft_version",
+        "generator",
+        "created",
+        "source",
+        "files",
+        "uncompressed_bytes",
+    ):
+        if key in manifest:
+            print(f"{key:<18} {manifest[key]}")
     return 0
 
 
@@ -139,6 +200,39 @@ def build_parser() -> argparse.ArgumentParser:
     listing = sub.add_parser("list", help="lista los .litematic encontrados en la máquina")
     listing.add_argument("--packs", action="store_true", help="lista también los resource packs")
     listing.set_defaults(func=cmd_list)
+
+    asset_parser = sub.add_parser("assets", help="gestiona el archivo de assets de Minecraft")
+    asset_sub = asset_parser.add_subparsers(dest="assets_command", required=True)
+
+    asset_build = asset_sub.add_parser(
+        "build", help="extrae blockstates, modelos y texturas de un client jar"
+    )
+    asset_build.add_argument(
+        "--jar",
+        type=Path,
+        default=None,
+        help="client jar de Minecraft (por defecto, el detectado más reciente)",
+    )
+    asset_build.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="archivo .l2oassets de salida (por defecto, en los datos del usuario)",
+    )
+    asset_build.add_argument(
+        "--force", action="store_true", help="sobrescribe el archivo si ya existe"
+    )
+    asset_build.set_defaults(func=cmd_assets_build)
+
+    asset_info = asset_sub.add_parser("info", help="muestra el manifiesto de un archivo de assets")
+    asset_info.add_argument(
+        "pack",
+        type=Path,
+        nargs="?",
+        default=None,
+        help="archivo .l2oassets (por defecto, el que usa el programa)",
+    )
+    asset_info.set_defaults(func=cmd_assets_info)
 
     export = sub.add_parser("export", help="exporta a OBJ + MTL + atlas")
     export.add_argument("path", type=Path, help="archivo .litematic")

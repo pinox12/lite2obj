@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import assets, litematic, paths
+from .. import assetpack, assets, litematic, paths
 from ..assets import ResourceManager
 from ..export import ExportOptions, ExportResult, export_obj
 from ..mesh import Mesh, MeshBuilder
@@ -56,6 +56,7 @@ __all__ = ["MainWindow", "main", "run"]
 
 _LITEMATIC_FILTER = "Litematica (*.litematic);;Todos los archivos (*)"
 _PNG_FILTER = "PNG (*.png);;Todos los archivos (*)"
+_ASSET_PACK_FILTER = "Assets de lite2obj (*.l2oassets);;Todos los archivos (*)"
 _DEMO_SCHEMATIC_NAME = "all_blocks_and_entities.litematic"
 
 
@@ -130,6 +131,23 @@ class ExportTask(QRunnable):
             self.signals.failed.emit(traceback.format_exc())
 
 
+class AssetPackTask(QRunnable):
+    """Genera el archivo .l2oassets sin bloquear la interfaz."""
+
+    def __init__(self, jar: Path, output: Path) -> None:
+        super().__init__()
+        self.jar = jar
+        self.output = output
+        self.signals = _Signals()
+
+    def run(self) -> None:  # pragma: no cover - se prueba desde la GUI
+        try:
+            info = assetpack.build_asset_pack(self.jar, self.output, force=True)
+            self.signals.finished.emit(info)
+        except Exception:
+            self.signals.failed.emit(traceback.format_exc())
+
+
 class MainWindow(QMainWindow):
     """Ventana principal: panel de opciones a la izquierda y viewport a la derecha."""
 
@@ -160,6 +178,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._load_packs()
+        self._update_assets_label()
         self._load_schematics()
 
         geometry = self.settings.value("geometry")
@@ -230,6 +249,10 @@ class MainWindow(QMainWindow):
         hint.setWordWrap(True)
         hint.setObjectName("hint")
         packs_layout.addWidget(hint)
+        self.assets_label = QLabel()
+        self.assets_label.setWordWrap(True)
+        self.assets_label.setObjectName("hint")
+        packs_layout.addWidget(self.assets_label)
         self.pack_list = QListWidget()
         self.pack_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.pack_list.setFixedHeight(150)
@@ -415,6 +438,12 @@ class MainWindow(QMainWindow):
         self.wire_action.setCheckable(True)
         self.wire_action.setShortcut(QKeySequence("W"))
 
+        self.assets_action = QAction("Generar archivo de assets…", self)
+        self.assets_action.setToolTip(
+            "Extrae blockstates, modelos y texturas del client jar de Minecraft instalado"
+        )
+        self.assets_action.triggered.connect(lambda: self._generate_asset_pack())
+
         self.demo_action = QAction("Renderizar litemática de prueba", self)
         self.demo_action.setToolTip("Abre y renderiza all_blocks_and_entities.litematic")
         self.demo_action.triggered.connect(lambda: self._render_demo())
@@ -432,6 +461,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.render_action)
         file_menu.addAction(self.export_action)
         file_menu.addAction(self.screenshot_action)
+        file_menu.addSeparator()
+        file_menu.addAction(self.assets_action)
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
@@ -542,11 +573,31 @@ class MainWindow(QMainWindow):
         if checked:
             self._invalidate()
 
+    def _update_assets_label(self) -> None:
+        pack = paths.asset_pack()
+        if pack is not None:
+            manifest = assetpack.read_manifest(pack) or {}
+            version = manifest.get("minecraft_version", "?")
+            self.assets_label.setText(f"Assets: Minecraft {version} · {pack.name}")
+            self.assets_label.setToolTip(str(pack))
+            return
+        jar = paths.client_jar()
+        if jar is not None:
+            self.assets_label.setText(f"Assets: client jar {jar.name}")
+            self.assets_label.setToolTip(str(jar))
+            return
+        self.assets_label.setText(
+            "Assets: no encontrados. Usa Archivo → Generar archivo de assets…"
+        )
+        self.assets_label.setToolTip("")
+
     def _refresh_lists(self) -> None:
         paths.resourcepack_dirs.cache_clear()
         paths.schematic_dirs.cache_clear()
+        paths.asset_pack.cache_clear()
         self._load_schematics()
         self._load_packs()
+        self._update_assets_label()
         self.status_label.setText("Listas actualizadas")
 
     def _checked_pack_names(self) -> list[str]:
@@ -877,6 +928,64 @@ class MainWindow(QMainWindow):
         else:
             self._show_error("No se pudo guardar la captura.", path)
 
+    def _generate_asset_pack(self) -> None:
+        if self._busy:
+            self.status_label.setText("Espera a que termine la operación actual")
+            return
+        jar = paths.client_jar()
+        if jar is None:
+            self._show_error(
+                "No se encontró Minecraft en este ordenador.",
+                "Instala Minecraft (o define LITE2OBJ_CLIENT_JAR) y vuelve a intentarlo.",
+            )
+            return
+
+        default = paths.asset_pack_output()
+        default.parent.mkdir(parents=True, exist_ok=True)
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar archivo de assets", str(default), _ASSET_PACK_FILTER
+        )
+        if not path:
+            return
+        output = Path(path)
+        if output.suffix.lower() != assetpack.ASSET_PACK_SUFFIX:
+            output = output.with_suffix(assetpack.ASSET_PACK_SUFFIX)
+
+        self.status_label.setText(f"Generando assets desde {jar.name}…")
+        task = AssetPackTask(jar, output)
+        task.signals.finished.connect(self._on_asset_pack)
+        task.signals.failed.connect(self._on_error)
+        self._task = task
+        self._set_busy(True, "assets")
+        self._pool.start(task)
+
+    def _on_asset_pack(self, info: assetpack.AssetPackInfo) -> None:
+        self._task = None
+        self._set_busy(False)
+        # El gestor y la detección cachean las fuentes; hay que recrearlos para que
+        # usen el archivo recién generado.
+        self._resources = None
+        self._resources_key = None
+        paths.asset_pack.cache_clear()
+        self._update_assets_label()
+        self._dirty = self.mesh is not None
+        if self._dirty:
+            self.dirty_label.show()
+        self.status_label.setText(
+            f"Assets de Minecraft {info.minecraft_version} guardados en {info.path.name}"
+        )
+        QMessageBox.information(
+            self,
+            "Archivo de assets generado",
+            f"Minecraft: {info.minecraft_version}\n"
+            f"Archivos: {info.files:,}\n"
+            f"Tamaño: {info.compressed_bytes / (1024 * 1024):.1f} MB\n\n"
+            f"{info.path}\n\n"
+            "El programa ya usa este archivo. Vuelve a renderizar si había una malla abierta.",
+        )
+        if self.path is not None:
+            self.render_mesh()
+
     def _render_demo(self) -> None:
         if self._busy:
             self.status_label.setText("Espera a que termine la operación actual")
@@ -902,7 +1011,7 @@ class MainWindow(QMainWindow):
             "lite2obj\n\n"
             "Renderiza esquemáticos de Litematica y los exporta a OBJ + MTL + atlas "
             "para Blender.\n\n"
-            "Python + PySide6 + OpenGL de Qt · texturas del client jar y resource packs.",
+            "Python + PySide6 + OpenGL de Qt · archivo de assets, client jar y resource packs.",
         )
 
     # -- estado ocupado / cierre ------------------------------------------- #
@@ -916,11 +1025,13 @@ class MainWindow(QMainWindow):
             self.export_button,
         ):
             widget.setEnabled(not busy)
+        self.assets_action.setEnabled(not busy)
         self.schematic_combo.setEnabled(not busy)
         self.progress.setVisible(busy)
         if busy:
             self.progress.setRange(0, 0)
-            self.status_label.setText("Renderizando…" if kind == "render" else "Exportando…")
+            label = {"render": "Renderizando…", "export": "Exportando…"}
+            self.status_label.setText(label.get(kind, "Generando assets…"))
         else:
             self.progress.setRange(0, 1)
             self.progress.setValue(0)

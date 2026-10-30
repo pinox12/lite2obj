@@ -19,7 +19,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from PIL import Image
 
-from . import paths
+from . import assetpack, paths
 
 __all__ = [
     "DEFAULT_NAMESPACE",
@@ -220,18 +220,45 @@ class ResourceManager:
     # -- construcción ------------------------------------------------------ #
 
     @classmethod
-    def discover(cls, packs: list[str | Path] | None = None) -> ResourceManager:
-        """Construye el gestor detectando el jar y aplicando los packs indicados.
+    def discover(
+        cls,
+        packs: list[str | Path] | None = None,
+        *,
+        asset_pack: str | Path | None = None,
+    ) -> ResourceManager:
+        """Construye el gestor con el archivo de assets o, si falta, el client jar.
 
         ``packs`` se interpreta en orden de prioridad creciente (el último gana),
         igual que la lista de packs de Minecraft. Los packs pueden indicarse por
         nombre (``"Mizuno's ..."``) o por ruta.
+
+        El archivo ``.l2oassets`` es la fuente vanilla por defecto. Si no existe, se
+        usa el client jar detectado; ``LITE2OBJ_CLIENT_JAR`` sigue teniendo prioridad
+        para probar una versión concreta.
         """
-        jar = paths.client_jar()
-        if jar is None:
-            raise FileNotFoundError(
-                "No se encontró ningún client jar de Minecraft. Define LITE2OBJ_CLIENT_JAR."
-            )
+        explicit_jar = paths.explicit_client_jar()
+        pack_path = Path(asset_pack) if asset_pack is not None else paths.asset_pack()
+        if asset_pack is None and explicit_jar is not None:
+            if not explicit_jar.is_file():
+                raise FileNotFoundError(
+                    f"LITE2OBJ_CLIENT_JAR no apunta a un archivo: {explicit_jar}"
+                )
+            base_source: ResourceSource = ZipSource(explicit_jar, name=explicit_jar.stem)
+        elif pack_path is not None:
+            if not assetpack.is_asset_pack(pack_path):
+                raise ValueError(
+                    f"El archivo de assets no es válido: {pack_path}. "
+                    "Genera uno con 'lite2obj assets build'."
+                )
+            base_source = ZipSource(pack_path, name=pack_path.stem)
+        else:
+            jar = paths.client_jar()
+            if jar is None:
+                raise FileNotFoundError(
+                    "No se encontró ningún client jar de Minecraft ni un archivo de assets. "
+                    "Genera uno con 'lite2obj assets build' o define LITE2OBJ_CLIENT_JAR."
+                )
+            base_source = ZipSource(jar, name=jar.stem)
 
         available = list_packs()
         by_name = {p.name.lower(): p for p in available}
@@ -250,9 +277,9 @@ class ResourceManager:
                 )
             selected.append(info)
 
-        # Prioridad: packs (el último indicado gana) y, por debajo, el jar vanilla.
+        # Prioridad: packs (el último indicado gana) y, por debajo, los assets vanilla.
         sources: list[ResourceSource] = [p.as_source() for p in reversed(selected)]
-        sources.append(ZipSource(jar, name=jar.stem))
+        sources.append(base_source)
         return cls(sources)
 
     # -- acceso ------------------------------------------------------------ #

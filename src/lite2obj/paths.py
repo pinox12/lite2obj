@@ -9,6 +9,7 @@ entorno:
 Variable                            Qué sobreescribe
 =================================== ==========================================
 ``LITE2OBJ_CLIENT_JAR``             ruta al client jar de Minecraft
+``LITE2OBJ_ASSET_PACK``             archivo ``.l2oassets`` ya generado
 ``LITE2OBJ_ASSETS``                 directorio ``assets`` (con ``objects``/``indexes``)
 ``LITE2OBJ_RESOURCEPACKS``          directorios de resource packs (separados por ``:``)
 ``LITE2OBJ_SCHEMATICS``             directorios de schematics (separados por ``:``)
@@ -19,19 +20,28 @@ Variable                            Qué sobreescribe
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 
 __all__ = [
+    "ASSET_PACK_NAME",
     "asset_dirs",
+    "asset_pack",
+    "asset_pack_output",
     "client_jar",
+    "explicit_client_jar",
     "minecraft_roots",
     "resourcepack_dirs",
     "schematic_dirs",
     "find_schematics",
+    "user_data_dir",
 ]
 
 _HOME = Path.home()
+
+#: Nombre por defecto del archivo de assets que genera ``lite2obj assets build``.
+ASSET_PACK_NAME = "lite2obj-assets.l2oassets"
 
 
 def _env_paths(var: str) -> list[Path]:
@@ -42,6 +52,53 @@ def _env_paths(var: str) -> list[Path]:
 def _env_path(var: str) -> Path | None:
     value = os.environ.get(var, "").strip()
     return Path(value).expanduser() if value else None
+
+
+def user_data_dir() -> Path:
+    """Directorio de datos del usuario donde se guarda el archivo de assets."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or (_HOME / "AppData" / "Local"))
+    elif sys.platform == "darwin":
+        base = _HOME / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or (_HOME / ".local" / "share"))
+    return base / "lite2obj"
+
+
+def asset_pack_output() -> Path:
+    """Ruta por defecto del archivo de assets generado."""
+    return user_data_dir() / ASSET_PACK_NAME
+
+
+@lru_cache(maxsize=1)
+def asset_pack() -> Path | None:
+    """Localiza el archivo de assets ya generado, si existe.
+
+    Se busca primero el que va dentro del bundle (PyInstaller), luego junto al
+    ejecutable, en el directorio actual, en la raíz del repositorio y, por último, en
+    los datos del usuario. ``LITE2OBJ_ASSET_PACK`` fuerza una ruta concreta.
+    """
+    explicit = _env_path("LITE2OBJ_ASSET_PACK")
+    if explicit is not None:
+        return explicit if explicit.is_file() else None
+
+    candidates: list[Path] = []
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        candidates.append(Path(bundle) / ASSET_PACK_NAME)
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / ASSET_PACK_NAME)
+    candidates.extend(
+        (
+            Path.cwd() / ASSET_PACK_NAME,
+            Path(__file__).resolve().parents[2] / ASSET_PACK_NAME,
+            user_data_dir() / ASSET_PACK_NAME,
+        )
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 #: Raíces conocidas de instalaciones (``.minecraft`` y lanzadores de terceros).
@@ -80,10 +137,15 @@ def _version_key(path: Path) -> tuple[int, ...]:
     return tuple(parts) or (0,)
 
 
+def explicit_client_jar() -> Path | None:
+    """Ruta indicada en ``LITE2OBJ_CLIENT_JAR``, aunque no exista."""
+    return _env_path("LITE2OBJ_CLIENT_JAR")
+
+
 @lru_cache(maxsize=1)
 def client_jar() -> Path | None:
     """Localiza el client jar de Minecraft más reciente que exista."""
-    explicit = _env_path("LITE2OBJ_CLIENT_JAR")
+    explicit = explicit_client_jar()
     if explicit is not None:
         return explicit if explicit.is_file() else None
 

@@ -16,15 +16,16 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 305 tests |
+| F8 | Tests | ✅ 313 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
 ## Requisitos
 
 - [uv](https://docs.astral.sh/uv/) y Python 3.14 (uv lo instala si hace falta).
-- Un client jar de Minecraft para resolver modelos y texturas (F2+). En esta máquina se
-  detecta automáticamente.
+- Un client jar de Minecraft **o** un archivo `lite2obj-assets.l2oassets` ya generado, para
+  resolver modelos y texturas (F2+). El programa prefiere el archivo de assets y sólo busca
+  el jar si no existe.
 - OpenGL 3.3 para la vista 3D (la CLI de export funciona sin GPU).
 
 ## Instalación
@@ -32,6 +33,35 @@ El plan completo está en [`PLAN.md`](PLAN.md).
 ```bash
 uv sync
 ```
+
+## Archivo de assets de Minecraft
+
+En lugar de leer el client jar cada vez, lite2obj usa un archivo `.l2oassets` que contiene
+sólo lo necesario para renderizar: blockstates, modelos, texturas (con sus `.mcmeta`),
+modelos de objeto y variantes de cuadro. Es un zip normal con un manifiesto
+`lite2obj-assets.json`; no incluye código, sonidos ni recetas.
+
+```bash
+# Extrae los assets del client jar detectado más reciente
+uv run lite2obj assets build
+
+# Versión o destino concretos (útil al salir una versión nueva de Minecraft)
+uv run lite2obj assets build --jar ~/.minecraft/versions/1.21.5/1.21.5.jar \
+    --output ./lite2obj-assets.l2oassets --force
+
+# Consulta la versión y el contenido del archivo que usa el programa
+uv run lite2obj assets info
+```
+
+El destino por defecto es `lite2obj-assets.l2oassets` dentro de los datos del usuario
+(`~/.local/share/lite2obj` en Linux, `%LOCALAPPDATA%\lite2obj` en Windows). El programa lo
+busca en este orden: bundle de PyInstaller, junto al ejecutable, directorio actual, raíz del
+repositorio y datos del usuario. `LITE2OBJ_ASSET_PACK` fuerza una ruta concreta. Los
+resource packs siguen teniendo prioridad sobre el archivo vanilla.
+
+En la app de escritorio está en **Archivo → Generar archivo de assets…**. Si tienes una
+versión nueva de Minecraft instalada, vuelve a generarlo y la app la usará en el siguiente
+render.
 
 ## Empaquetado portable
 
@@ -74,9 +104,13 @@ ejecutar sin instalador. No requiere Python instalado.
 
 ### Notas
 
-- La AppImage y el `.exe` **no incluyen los assets de Minecraft** (texturas, modelos y
-  client jar) por derechos de autor. Siguen funcionando con la detección automática de
-  Minecraft o con `LITE2OBJ_CLIENT_JAR` / `LITE2OBJ_ASSETS`.
+- La AppImage y el `.exe` **no incluyen los assets de Minecraft** por defecto (texturas,
+  modelos y client jar) por derechos de autor. Siguen funcionando con el archivo
+  `.l2oassets`, con la detección automática de Minecraft o con `LITE2OBJ_ASSET_PACK` /
+  `LITE2OBJ_CLIENT_JAR`.
+- Si quieres distribuir los assets dentro del portable, coloca
+  `lite2obj-assets.l2oassets` en la raíz del repositorio antes de ejecutar el script de
+  empaquetado; PyInstaller lo incluirá en el bundle.
 - La vista 3D necesita OpenGL 3.3; el equipo de destino debe tener drivers gráficos.
 - El icono se regenera con `uv run python packaging/make_icon.py`.
 - Los artefactos (`dist/`, `build/`) están en `.gitignore`.
@@ -91,6 +125,10 @@ uv run lite2obj info esquema.litematic
 
 # Lista los .litematic y los resource packs encontrados en la máquina
 uv run lite2obj list --packs
+
+# Genera el archivo de assets y consulta su manifiesto
+uv run lite2obj assets build
+uv run lite2obj assets info
 
 # Exporta a OBJ + MTL + atlas.png (para Blender)
 uv run lite2obj export esquema.litematic salida/ --name casa
@@ -250,6 +288,8 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
   bioma, entidades y *block entities*, criaturas (desactivadas por defecto), resolución del
   atlas (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y corte por capas Y.
 - **Exportar a Blender**: carpeta, nombre, agrupación, escala y `Z arriba` (nativo de Blender).
+- **Archivo → Generar archivo de assets…**: extrae los assets del client jar instalado a un
+  `.l2oassets` para que la app no dependa de Minecraft en cada arranque.
 - **Ayuda → Renderizar litemática de prueba**: abre `all_blocks_and_entities.litematic`, el
   esquemático de referencia con todos los bloques, combinaciones y entidades.
 
@@ -278,9 +318,10 @@ uv run mypy src        # tipos
 
 ## Detección de assets
 
-`lite2obj` localiza el client jar, los `assets` y las carpetas de resource packs y
-schematics en las rutas habituales (vanilla, Modrinth, Prism, MultiMC, ATLauncher, Flatpak).
-Se puede forzar con variables de entorno: `LITE2OBJ_CLIENT_JAR`, `LITE2OBJ_ASSETS`,
+`lite2obj` usa primero el archivo `.l2oassets` y, si no existe, localiza el client jar, los
+`assets` y las carpetas de resource packs y schematics en las rutas habituales (vanilla,
+Modrinth, Prism, MultiMC, ATLauncher, Flatpak). Se puede forzar con variables de entorno:
+`LITE2OBJ_ASSET_PACK`, `LITE2OBJ_CLIENT_JAR`, `LITE2OBJ_ASSETS`,
 `LITE2OBJ_RESOURCEPACKS`, `LITE2OBJ_SCHEMATICS`, `LITE2OBJ_MINECRAFT`.
 
 ## Estructura
@@ -289,8 +330,9 @@ Se puede forzar con variables de entorno: `LITE2OBJ_CLIENT_JAR`, `LITE2OBJ_ASSET
 src/lite2obj/
   nbt.py         lector NBT (sin dependencias)
   litematic.py   parser .litematic -> regiones, paleta, voxels
-  paths.py       detección de instalaciones de Minecraft
-  assets.py      pila de recursos (jar + resource packs)
+  paths.py       detección de instalaciones de Minecraft y del archivo de assets
+  assetpack.py   generación/lectura del archivo .l2oassets
+  assets.py      pila de recursos (archivo de assets, jar + resource packs)
   models.py      blockstates y modelos (variants/multipart, rotaciones)
   fallbacks.py   geometría sustituta (fluidos, bloques de entidad)
   aliases.py     bloques renombrados entre versiones
