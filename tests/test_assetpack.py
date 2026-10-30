@@ -128,6 +128,26 @@ def test_asset_pack_env_override(tmp_path, monkeypatch):
     assert paths.asset_pack() == pack
 
 
+def test_bundled_asset_pack_has_priority(tmp_path, monkeypatch):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    bundled = bundle / paths.ASSET_PACK_NAME
+    bundled.write_bytes(b"")
+    user = tmp_path / "user"
+    user.mkdir()
+    (user / paths.ASSET_PACK_NAME).write_bytes(b"")
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+
+    monkeypatch.delenv("LITE2OBJ_ASSET_PACK", raising=False)
+    monkeypatch.setattr(paths.sys, "_MEIPASS", str(bundle), raising=False)
+    monkeypatch.setattr(paths.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(paths, "user_data_dir", lambda: user)
+    monkeypatch.chdir(cwd)
+
+    assert paths.asset_pack() == bundled
+
+
 def test_cli_assets_build_and_info(tmp_path, capsys):
     jar = _fake_jar(tmp_path)
     pack = tmp_path / "minecraft.l2oassets"

@@ -104,13 +104,17 @@ ejecutar sin instalador. No requiere Python instalado.
 
 ### Notas
 
-- La AppImage y el `.exe` **no incluyen los assets de Minecraft** por defecto (texturas,
-  modelos y client jar) por derechos de autor. Siguen funcionando con el archivo
-  `.l2oassets`, con la detección automática de Minecraft o con `LITE2OBJ_ASSET_PACK` /
-  `LITE2OBJ_CLIENT_JAR`.
-- Si quieres distribuir los assets dentro del portable, coloca
-  `lite2obj-assets.l2oassets` en la raíz del repositorio antes de ejecutar el script de
-  empaquetado; PyInstaller lo incluirá en el bundle.
+- Los scripts de empaquetado ejecutan `packaging/prepare_assets.py`, que deja
+  `build/assets/lite2obj-assets.l2oassets` antes de PyInstaller. Si ya existe lo reutiliza;
+  si no, copia el que usa lite2obj (datos del usuario o `LITE2OBJ_ASSET_PACK`); y si
+  tampoco existe, lo genera desde el client jar detectado. Así la AppImage y el `.exe`
+  **llevan dentro los assets** y funcionan sin Minecraft instalado.
+- El archivo queda ignorado por git (`*.l2oassets`). Ten en cuenta que el portable
+  resultante redistribuye assets de Minecraft; revisa las condiciones de Mojang antes de
+  publicarlo.
+- Si falta Minecraft y no hay ningún `.l2oassets`, el empaquetado se detiene con un mensaje
+  que indica cómo generarlo. Tras actualizar Minecraft, regenera el archivo con
+  `uv run python packaging/prepare_assets.py --force` antes de empaquetar.
 - La vista 3D necesita OpenGL 3.3; el equipo de destino debe tener drivers gráficos.
 - El icono se regenera con `uv run python packaging/make_icon.py`.
 - Los artefactos (`dist/`, `build/`) están en `.gitignore`.
