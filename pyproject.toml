@@ -28,6 +28,9 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.1",
 ]
+packaging = [
+    "pyinstaller>=6.22",
+]
 
 [tool.ruff]
 line-length = 100

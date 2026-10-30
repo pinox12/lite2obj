@@ -209,6 +209,21 @@ def test_demo_schematic_exists():
     assert path.is_file()
 
 
+def test_demo_schematic_is_found_inside_a_pyinstaller_bundle(tmp_path, monkeypatch):
+    """PyInstaller deja los ``datas`` en ``sys._MEIPASS``, no en la raíz del repo."""
+    import sys
+
+    from lite2obj.gui.app import _DEMO_SCHEMATIC_NAME, _demo_schematic_path
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    demo = bundle / _DEMO_SCHEMATIC_NAME
+    demo.write_bytes(b"")
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle), raising=False)
+
+    assert _demo_schematic_path() == demo
+
+
 def test_line_shader_uses_a_configurable_depth_bias():
     from lite2obj.gui.viewport import _GRID_DEPTH_BIAS, _LINE_DEPTH_BIAS, _LINE_VERTEX
 

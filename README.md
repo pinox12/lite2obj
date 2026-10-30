@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 302 tests |
+| F8 | Tests | ✅ 305 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -32,6 +32,56 @@ El plan completo está en [`PLAN.md`](PLAN.md).
 ```bash
 uv sync
 ```
+
+## Empaquetado portable
+
+La app se puede distribuir sin que el usuario instale Python ni las dependencias. El
+empaquetado usa PyInstaller y se hace **en el sistema de destino**: no hay compilación
+cruzada, así que la AppImage se genera en Linux y el `.exe` en Windows.
+
+```bash
+# Dependencias de empaquetado (no hacen falta para desarrollar)
+uv sync --group packaging
+```
+
+### Linux: AppImage
+
+```bash
+./packaging/build_appimage.sh
+```
+
+Genera `dist/lite2obj-<versión>-x86_64.AppImage`. Es un único archivo ejecutable:
+
+```bash
+chmod +x dist/lite2obj-*.AppImage
+./dist/lite2obj-*.AppImage
+```
+
+El script descarga `appimagetool` en `build/tools` si no está en `PATH`. Si la máquina no
+tiene FUSE, se puede arrancar con `APPIMAGE_EXTRACT_AND_RUN=1`. También se puede indicar una
+herramienta concreta con `APPIMAGETOOL=/ruta/a/appimagetool`.
+
+### Windows: `.exe` portable
+
+Desde PowerShell en Windows:
+
+```powershell
+.\packaging\build_windows.ps1
+```
+
+Genera `dist\lite2obj.exe`, un único archivo que se puede copiar a cualquier carpeta y
+ejecutar sin instalador. No requiere Python instalado.
+
+### Notas
+
+- La AppImage y el `.exe` **no incluyen los assets de Minecraft** (texturas, modelos y
+  client jar) por derechos de autor. Siguen funcionando con la detección automática de
+  Minecraft o con `LITE2OBJ_CLIENT_JAR` / `LITE2OBJ_ASSETS`.
+- La vista 3D necesita OpenGL 3.3; el equipo de destino debe tener drivers gráficos.
+- El icono se regenera con `uv run python packaging/make_icon.py`.
+- Los artefactos (`dist/`, `build/`) están en `.gitignore`.
+- Para forzar un único binario también en Linux: `LITE2OBJ_ONEFILE=1 uv run --group
+  packaging pyinstaller packaging/lite2obj.spec`.
 
 ## Uso
 

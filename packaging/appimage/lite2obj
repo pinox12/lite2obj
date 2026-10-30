@@ -1,0 +1,4 @@
+#!/bin/sh
+# Lanzador de la AppImage; el binario real está en usr/lib/lite2obj.
+HERE=$(dirname "$(readlink -f "$0")")
+exec "$HERE/../lib/lite2obj/lite2obj" "$@"

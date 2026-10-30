@@ -60,10 +60,17 @@ _DEMO_SCHEMATIC_NAME = "all_blocks_and_entities.litematic"
 
 
 def _demo_schematic_path() -> Path:
-    """Ruta del esquemático de prueba incluido en el repositorio."""
-    candidates = (
-        Path(__file__).resolve().parents[3] / _DEMO_SCHEMATIC_NAME,
-        Path.cwd() / _DEMO_SCHEMATIC_NAME,
+    """Ruta del esquemático de prueba incluido en el repositorio o en el bundle."""
+    candidates: list[Path] = []
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        # PyInstaller deja los ``datas`` en la raíz de ``_MEIPASS``.
+        candidates.append(Path(bundle) / _DEMO_SCHEMATIC_NAME)
+    candidates.extend(
+        (
+            Path(__file__).resolve().parents[3] / _DEMO_SCHEMATIC_NAME,
+            Path.cwd() / _DEMO_SCHEMATIC_NAME,
+        )
     )
     for candidate in candidates:
         if candidate.is_file():

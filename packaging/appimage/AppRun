@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppRun de la AppImage: lanza el binario de PyInstaller que vive en usr/lib.
+HERE=$(dirname "$(readlink -f "$0")")
+exec "$HERE/usr/bin/lite2obj" "$@"
