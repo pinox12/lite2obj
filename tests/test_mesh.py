@@ -1316,6 +1316,9 @@ def fluid_setup() -> MeshBuilder:
             blockstate_path("minecraft:water"): {
                 "variants": {"": {"model": "minecraft:block/water"}}
             },
+            blockstate_path("minecraft:bubble_column"): {
+                "variants": {"": {"model": "minecraft:block/water"}}
+            },
             model_path("minecraft:block/water"): {},
             texture_path("minecraft:block/water_still"): make_png(color=(174, 174, 174, 180)),
             texture_path("minecraft:block/water_flow"): make_png(color=(174, 174, 174, 180)),
@@ -1418,6 +1421,25 @@ def test_still_water_keeps_the_still_surface_and_flowing_sides():
     sides = np.where(np.abs(normals[:, 1]) < 0.5)[0]
     assert len(sides) == 4
     assert np.all(mesh.sprite[sides] == flow.index)
+
+
+def test_bubble_column_is_rendered_as_tinted_water():
+    """La columna de burbujas es agua: no debe caer al cubo de respaldo con partículas."""
+    builder = fluid_setup()
+    bubble = BlockState("minecraft:bubble_column", (("drag", "true"),))
+    region = _region([AIR, bubble], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 6
+    assert set(mesh.alpha_mode.tolist()) == {2}
+    assert mesh.positions[:, 1].max() == pytest.approx(8.0 / 9.0 * 10.0 / 12.0 - 0.001)
+
+    water_tint = (0x3F, 0x76, 0xE4)
+    still = mesh.atlas.sprite("minecraft:block/water_still", water_tint)
+    flow = mesh.atlas.sprite("minecraft:block/water_flow", water_tint)
+    assert still is not None
+    assert flow is not None
+    assert set(int(sprite) for sprite in mesh.sprite) == {still.index, flow.index}
 
 
 def test_water_culls_faces_between_water_blocks():

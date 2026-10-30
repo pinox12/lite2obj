@@ -401,6 +401,8 @@ def test_fluid_cube_height_tint_and_cullface():
 
     # Los esquemáticos antiguos pueden traer el identificador ``flowing_water``.
     assert FallbackResolver().is_fluid("flowing_water") == "water"
+    # La columna de burbujas se dibuja como agua aunque no sea un bloque de fluido.
+    assert FallbackResolver().is_fluid("bubble_column") == "water"
 
 
 def test_alias_chain_becomes_iron_chain():

@@ -123,6 +123,10 @@ class FallbackResolver:
         if path.startswith("flowing_"):
             # Identificadores antiguos (``flowing_water``) que aún aparecen en esquemáticos.
             path = path[len("flowing_") :]
+        if path == "bubble_column":
+            # La columna de burbujas no es un bloque de fluido, pero el cliente la dibuja
+            # como una columna de agua (las burbujas son partículas, no geometría).
+            return "water"
         if path in self.fluids:
             return path
         for suffix in _FLUID_SUFFIXES:
