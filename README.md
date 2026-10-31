@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 287 tests |
+| F8 | Tests | ✅ 288 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -62,7 +62,8 @@ El destino por defecto es `lite2obj-assets.l2oassets` dentro de los datos del us
 (`~/.local/share/lite2obj` en Linux, `%LOCALAPPDATA%\lite2obj` en Windows). Sin recorrer el
 disco, el programa sólo mira estas ubicaciones, por este orden: bundle de PyInstaller,
 carpeta del ejecutable y datos del usuario. `LITE2OBJ_ASSET_PACK` fuerza una ruta concreta.
-Los resource packs sólo se aplican si se pasan explícitamente con `--packs`.
+Los resource packs sólo se aplican si se pasan explícitamente con `--packs` o se añaden en
+la app con *Añadir .zip…* / *Añadir carpeta…*.
 
 En la app de escritorio está en **Archivo → Generar archivo de assets…** (o en el panel
 lateral): pide el client jar, guarda el archivo y lo usa en el siguiente render. Si arranca
@@ -295,6 +296,9 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
   buscan `.litematic` por el disco.
 - **Assets de Minecraft**: muestra el archivo activo y permite generarlo eligiendo el client
   jar. Si falta, la app avisa con las instrucciones.
+- **Resource packs**: opcional; se añaden a mano con *Añadir .zip…* o *Añadir carpeta…*,
+  se activan con casillas y se ordenan con *Subir*/*Bajar*. Arriba = mayor prioridad y no
+  se buscan packs en el disco.
 - **Vista y render**: descartar caras ocultas, *backface culling* como Minecraft, tintes de
   bioma, entidades y *block entities*, criaturas (desactivadas por defecto), resolución del
   atlas (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y corte por capas Y.
@@ -333,7 +337,8 @@ uv run mypy src        # tipos
 resource packs ni esquemáticos. Sin recorrer el disco, lo busca en el bundle de PyInstaller,
 junto al ejecutable y en los datos del usuario. Variables de entorno:
 `LITE2OBJ_ASSET_PACK` (ruta explícita al archivo) y `LITE2OBJ_CLIENT_JAR` (client jar que
-usa `assets build`). Los resource packs se indican con `--packs`.
+usa `assets build`). Los resource packs se indican con `--packs` o se añaden en la app; en
+ningún caso se buscan por el disco.
 
 ## Estructura
 

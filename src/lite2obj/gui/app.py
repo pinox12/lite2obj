@@ -3,7 +3,8 @@
 Todo el flujo (abrir un esquemático, ajustar el render, previsualizarlo en 3D y exportarlo
 a OBJ) ocurre en una única ventana Qt. El renderizado 3D se hace en Python con el OpenGL
 nativo de Qt (:class:`QOpenGLWidget`). No se buscan archivos en el disco: los esquemáticos
-se abren con el diálogo del sistema y las texturas salen del archivo ``.l2oassets``.
+se abren con el diálogo del sistema, los resource packs se añaden a mano y las texturas
+salen del archivo ``.l2oassets``.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from typing import Any
 from PySide6.QtCore import QObject, QRunnable, QSettings, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QKeySequence, QPalette, QSurfaceFormat
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QColorDialog,
@@ -30,6 +32,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QProgressBar,
@@ -56,7 +60,15 @@ _LITEMATIC_FILTER = "Litematica (*.litematic);;Todos los archivos (*)"
 _PNG_FILTER = "PNG (*.png);;Todos los archivos (*)"
 _ASSET_PACK_FILTER = "Assets de lite2obj (*.l2oassets);;Todos los archivos (*)"
 _JAR_FILTER = "Minecraft client (*.jar);;Todos los archivos (*)"
+_PACK_FILTER = "Resource pack (*.zip);;Todos los archivos (*)"
 _DEMO_SCHEMATIC_NAME = "all_blocks_and_entities.litematic"
+
+
+def _is_resource_pack(path: Path) -> bool:
+    """Un pack es un ``.zip`` o una carpeta con una subcarpeta ``assets``."""
+    if path.is_file():
+        return path.suffix.lower() == ".zip"
+    return path.is_dir() and (path / "assets").is_dir()
 
 
 def _demo_schematic_path() -> Path:
@@ -163,16 +175,20 @@ class MainWindow(QMainWindow):
         self.mesh: Mesh | None = None
         self._mesh_key: tuple | None = None
         self._resources: ResourceManager | None = None
+        self._resources_key: tuple[str, ...] | None = None
         self._dirty = False
         self._busy = False
         self._export_after_render = False
         self._task: Any = None
         self._task_key: tuple | None = None
+        self._task_packs: tuple[str, ...] | None = None
         self._render_started = 0.0
+        self._packs_loading = False
         self._layers_guard = False
         self._pool = QThreadPool.globalInstance()
 
         self._build_ui()
+        self._load_packs()
         self._update_assets_label()
 
         geometry = self.settings.value("geometry")
@@ -258,6 +274,39 @@ class MainWindow(QMainWindow):
         self.assets_button.setToolTip("Elige el client jar de Minecraft y genera el .l2oassets")
         assets_layout.addWidget(self.assets_button)
         layout.addWidget(assets_group)
+
+        # Resource packs (sólo los que añada el usuario; no se buscan en el disco)
+        packs_group = QGroupBox("Resource packs")
+        packs_layout = QVBoxLayout(packs_group)
+        packs_hint = QLabel(
+            "Opcional. Arriba = mayor prioridad. Los assets que falten se toman del "
+            "archivo vanilla."
+        )
+        packs_hint.setWordWrap(True)
+        packs_hint.setObjectName("hint")
+        packs_layout.addWidget(packs_hint)
+        self.pack_list = QListWidget()
+        self.pack_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.pack_list.setFixedHeight(140)
+        self.pack_list.setToolTip("Marca los packs que quieres aplicar al render")
+        packs_layout.addWidget(self.pack_list)
+        add_row = QHBoxLayout()
+        self.pack_add_file = QPushButton("Añadir .zip…")
+        self.pack_add_file.setToolTip("Añade un resource pack comprimido")
+        self.pack_add_dir = QPushButton("Añadir carpeta…")
+        self.pack_add_dir.setToolTip("Añade un resource pack descomprimido")
+        add_row.addWidget(self.pack_add_file)
+        add_row.addWidget(self.pack_add_dir)
+        packs_layout.addLayout(add_row)
+        move_row = QHBoxLayout()
+        self.pack_up = QPushButton("Subir")
+        self.pack_down = QPushButton("Bajar")
+        self.pack_remove = QPushButton("Quitar")
+        move_row.addWidget(self.pack_up)
+        move_row.addWidget(self.pack_down)
+        move_row.addWidget(self.pack_remove)
+        packs_layout.addLayout(move_row)
+        layout.addWidget(packs_group)
 
         self.dirty_label = QLabel("Hay cambios sin aplicar. Pulsa Renderizar (F5).")
         self.dirty_label.setObjectName("warning")
@@ -496,6 +545,13 @@ class MainWindow(QMainWindow):
         self.reload_button.clicked.connect(lambda: self._reload_current())
         self.assets_button.clicked.connect(lambda: self._generate_asset_pack())
 
+        self.pack_add_file.clicked.connect(lambda: self._add_pack_dialog(False))
+        self.pack_add_dir.clicked.connect(lambda: self._add_pack_dialog(True))
+        self.pack_remove.clicked.connect(lambda: self._remove_pack())
+        self.pack_up.clicked.connect(lambda: self._move_pack(-1))
+        self.pack_down.clicked.connect(lambda: self._move_pack(1))
+        self.pack_list.itemChanged.connect(self._pack_changed)
+
         self.cull_check.toggled.connect(lambda: self.render_mesh())
         self.tint_check.toggled.connect(lambda: self.render_mesh())
         self.mobs_check.toggled.connect(lambda: self.render_mesh())
@@ -569,6 +625,141 @@ class MainWindow(QMainWindow):
             return
         self.open_path(self.path)
 
+    # -- resource packs ----------------------------------------------------- #
+
+    def _settings_list(self, key: str) -> list[str]:
+        value = self.settings.value(key, [])
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, (list, tuple)):
+            return [str(item) for item in value]
+        return [str(value)]
+
+    def _load_packs(self) -> None:
+        """Carga los packs añadidos por el usuario, sin buscar en el disco."""
+        paths = self._settings_list("resource_packs")
+        enabled = set(self._settings_list("resource_packs_enabled"))
+        self._packs_loading = True
+        self.pack_list.clear()
+        missing = False
+        for raw in paths:
+            path = Path(raw).expanduser()
+            if not _is_resource_pack(path):
+                missing = True
+                continue
+            self._append_pack_item(path, checked=str(path) in enabled)
+        self._packs_loading = False
+        if missing:
+            self._save_packs()
+
+    def _append_pack_item(self, path: Path, *, checked: bool, index: int | None = None) -> None:
+        name = path.stem if path.is_file() else path.name
+        item = QListWidgetItem(name)
+        item.setData(Qt.ItemDataRole.UserRole, str(path))
+        item.setFlags(
+            item.flags()
+            | Qt.ItemFlag.ItemIsUserCheckable
+            | Qt.ItemFlag.ItemIsSelectable
+            | Qt.ItemFlag.ItemIsEnabled
+        )
+        item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        item.setToolTip(str(path))
+        if index is None:
+            self.pack_list.addItem(item)
+        else:
+            self.pack_list.insertItem(index, item)
+
+    def _save_packs(self) -> None:
+        paths: list[str] = []
+        enabled: list[str] = []
+        for index in range(self.pack_list.count()):
+            item = self.pack_list.item(index)
+            path = item.data(Qt.ItemDataRole.UserRole)
+            if not path:
+                continue
+            paths.append(str(path))
+            if item.checkState() == Qt.CheckState.Checked:
+                enabled.append(str(path))
+        self.settings.setValue("resource_packs", paths)
+        self.settings.setValue("resource_packs_enabled", enabled)
+
+    def _add_pack_dialog(self, as_dir: bool) -> None:
+        start = str(self.settings.value("last_pack_dir", str(Path.home())))
+        if as_dir:
+            chosen = QFileDialog.getExistingDirectory(self, "Añadir resource pack", start)
+        else:
+            chosen, _ = QFileDialog.getOpenFileName(
+                self, "Añadir resource pack", start, _PACK_FILTER
+            )
+        if not chosen:
+            return
+        path = Path(chosen)
+        self.settings.setValue("last_pack_dir", str(path if path.is_dir() else path.parent))
+        self._add_pack(path)
+
+    def _add_pack(self, path: Path) -> None:
+        path = path.expanduser()
+        if not _is_resource_pack(path):
+            self._show_error(
+                "El resource pack no es válido.",
+                f"{path}\n\nDebe ser un archivo .zip o una carpeta con una subcarpeta 'assets'.",
+            )
+            return
+        key = str(path.resolve())
+        for index in range(self.pack_list.count()):
+            if self.pack_list.item(index).data(Qt.ItemDataRole.UserRole) == key:
+                self.pack_list.setCurrentRow(index)
+                return
+        # El pack nuevo entra con la prioridad más alta.
+        self._packs_loading = True
+        self._append_pack_item(path.resolve(), checked=True, index=0)
+        self._packs_loading = False
+        self.pack_list.setCurrentRow(0)
+        self._packs_changed()
+
+    def _remove_pack(self) -> None:
+        row = self.pack_list.currentRow()
+        if row < 0:
+            return
+        self.pack_list.takeItem(row)
+        self._packs_changed()
+
+    def _move_pack(self, delta: int) -> None:
+        row = self.pack_list.currentRow()
+        target = row + delta
+        if row < 0 or not (0 <= target < self.pack_list.count()):
+            return
+        item = self.pack_list.takeItem(row)
+        self.pack_list.insertItem(target, item)
+        self.pack_list.setCurrentRow(target)
+        self._packs_changed()
+
+    def _pack_changed(self, _item: QListWidgetItem) -> None:
+        if not self._packs_loading:
+            self._packs_changed()
+
+    def _packs_changed(self) -> None:
+        self._save_packs()
+        # Las fuentes y el atlas dependen de los packs: hay que reconstruirlos.
+        self._resources = None
+        self._resources_key = None
+        self._invalidate()
+
+    def _selected_packs(self) -> list[str]:
+        # La lista se muestra con la mayor prioridad arriba, pero ``discover`` interpreta
+        # la lista de menor a mayor prioridad (el último gana).
+        paths: list[str] = []
+        for index in range(self.pack_list.count()):
+            item = self.pack_list.item(index)
+            if item.checkState() != Qt.CheckState.Checked:
+                continue
+            path = item.data(Qt.ItemDataRole.UserRole)
+            if path:
+                paths.append(str(path))
+        return list(reversed(paths))
+
     # -- apertura y render -------------------------------------------------- #
 
     def open_path(self, path: Path) -> None:
@@ -630,6 +821,7 @@ class MainWindow(QMainWindow):
 
     def _render_options(self) -> RenderOptions:
         return RenderOptions(
+            packs=self._selected_packs(),
             cull=self.cull_check.isChecked(),
             tint=self.tint_check.isChecked(),
             atlas_scale=int(self.atlas_scale_combo.currentData()),
@@ -641,6 +833,7 @@ class MainWindow(QMainWindow):
     def _render_key(self) -> tuple:
         return (
             str(self.path),
+            tuple(self._selected_packs()),
             self.cull_check.isChecked(),
             self.tint_check.isChecked(),
             int(self.atlas_scale_combo.currentData()),
@@ -658,12 +851,14 @@ class MainWindow(QMainWindow):
             return
         options = self._render_options()
         key = self._render_key()
-        task = RenderTask(self.path, options, self._resources)
+        resources = self._resources if self._resources_key == tuple(options.packs) else None
+        task = RenderTask(self.path, options, resources)
         task.signals.finished.connect(self._on_mesh)
         task.signals.failed.connect(self._on_error)
         task.signals.progress.connect(self._on_progress)
         self._task = task
         self._task_key = key
+        self._task_packs = tuple(options.packs)
         self._render_started = time.perf_counter()
         self._set_busy(True, "render")
         self._pool.start(task)
@@ -691,6 +886,7 @@ class MainWindow(QMainWindow):
             self.dirty_label.hide()
 
         self._resources = mesh.atlas.resources
+        self._resources_key = self._task_packs
         if self._export_after_render:
             self._export_after_render = False
             if self._dirty:
@@ -898,6 +1094,7 @@ class MainWindow(QMainWindow):
         # la variable de entorno hace que esta sesión lo encuentre.
         os.environ["LITE2OBJ_ASSET_PACK"] = str(info.path)
         self._resources = None
+        self._resources_key = None
         paths.asset_pack.cache_clear()
         self._update_assets_label()
         self._dirty = self.mesh is not None
@@ -955,6 +1152,12 @@ class MainWindow(QMainWindow):
             self.reload_button,
             self.render_button,
             self.export_button,
+            self.pack_add_file,
+            self.pack_add_dir,
+            self.pack_remove,
+            self.pack_up,
+            self.pack_down,
+            self.pack_list,
         ):
             widget.setEnabled(not busy)
         self.assets_action.setEnabled(not busy)

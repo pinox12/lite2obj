@@ -65,6 +65,22 @@ def test_view_projection_maps_target_to_center():
     assert abs(ndc[1]) < 1e-6
 
 
+def test_resource_pack_path_validation(tmp_path):
+    from lite2obj.gui.app import _is_resource_pack
+
+    folder = tmp_path / "pack"
+    (folder / "assets").mkdir(parents=True)
+    archive = tmp_path / "pack.zip"
+    archive.write_bytes(b"PK")
+    invalid = tmp_path / "otra"
+    invalid.mkdir()
+
+    assert _is_resource_pack(folder)
+    assert _is_resource_pack(archive)
+    assert not _is_resource_pack(invalid)
+    assert not _is_resource_pack(tmp_path / "no-existe")
+
+
 def test_orbit_pan_zoom_change_camera():
     camera = OrbitCamera()
     camera.fit((16, 16, 16))
