@@ -92,6 +92,33 @@ def _resource_packs_in(path: Path) -> list[Path]:
     )
 
 
+def _asset_status(pack: Path | None) -> tuple[str, str, str]:
+    """Estado, detalle y color del archivo de assets base de Minecraft.
+
+    Devuelve ``(texto de estado, detalle, color)``. El detalle incluye la versión de
+    Minecraft con la que se generó el archivo.
+    """
+    if pack is None:
+        return (
+            "✗  Assets base de Minecraft no configurados",
+            "Genera el archivo .l2oassets desde un client jar.",
+            "#e8b45a",
+        )
+    if not assetpack.is_asset_pack(pack):
+        return (
+            "✗  El archivo de assets no es válido",
+            f"{pack.name} · vuelve a generarlo desde un client jar.",
+            "#e8b45a",
+        )
+    manifest = assetpack.read_manifest(pack) or {}
+    version = manifest.get("minecraft_version") or "desconocida"
+    return (
+        "✓  Assets base de Minecraft configurados",
+        f"Generados desde Minecraft {version} · {pack.name}",
+        "#58c27d",
+    )
+
+
 def _demo_schematic_path() -> Path:
     """Ruta del esquemático de prueba incluido en el repositorio o en el bundle."""
     candidates: list[Path] = []
@@ -280,13 +307,9 @@ class MainWindow(QMainWindow):
         # Assets
         assets_group = QGroupBox("Assets de Minecraft")
         assets_layout = QVBoxLayout(assets_group)
-        assets_hint = QLabel(
-            "El programa usa el archivo .l2oassets incluido. Si falta, genéralo desde un "
-            "client jar."
-        )
-        assets_hint.setWordWrap(True)
-        assets_hint.setObjectName("hint")
-        assets_layout.addWidget(assets_hint)
+        self.assets_status = QLabel()
+        self.assets_status.setWordWrap(True)
+        assets_layout.addWidget(self.assets_status)
         self.assets_label = QLabel()
         self.assets_label.setWordWrap(True)
         self.assets_label.setObjectName("hint")
@@ -606,20 +629,11 @@ class MainWindow(QMainWindow):
 
     def _update_assets_label(self) -> None:
         pack = paths.asset_pack()
-        if pack is None:
-            self.assets_label.setText(
-                "Assets: no encontrados. Genera el archivo desde un client jar."
-            )
-            self.assets_label.setToolTip("")
-            return
-        if not assetpack.is_asset_pack(pack):
-            self.assets_label.setText("Assets: el archivo no es válido. Genera uno nuevo.")
-            self.assets_label.setToolTip(str(pack))
-            return
-        manifest = assetpack.read_manifest(pack) or {}
-        version = manifest.get("minecraft_version", "?")
-        self.assets_label.setText(f"Assets: Minecraft {version} · {pack.name}")
-        self.assets_label.setToolTip(str(pack))
+        status, detail, color = _asset_status(pack)
+        self.assets_status.setText(status)
+        self.assets_status.setStyleSheet(f"color: {color}; font-weight: 600;")
+        self.assets_label.setText(detail)
+        self.assets_label.setToolTip(str(pack) if pack is not None else "")
 
     def _ensure_assets(self) -> bool:
         if self._asset_pack_path() is not None:

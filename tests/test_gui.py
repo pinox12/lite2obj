@@ -5,7 +5,9 @@ La lógica de cámara y la preparación de la malla no necesitan una ventana rea
 
 from __future__ import annotations
 
+import json
 import math
+import zipfile
 
 import numpy as np
 import pytest
@@ -79,6 +81,34 @@ def test_resource_pack_path_validation(tmp_path):
     assert _is_resource_pack(archive)
     assert not _is_resource_pack(invalid)
     assert not _is_resource_pack(tmp_path / "no-existe")
+
+
+def test_asset_status_reports_version(tmp_path):
+    from lite2obj import assetpack
+    from lite2obj.gui.app import _asset_status
+
+    status, detail, _ = _asset_status(None)
+    assert "✗" in status
+    assert "no configurados" in status
+    assert "client jar" in detail
+
+    invalid = tmp_path / "malo.l2oassets"
+    invalid.write_bytes(b"no es un zip")
+    status, detail, _ = _asset_status(invalid)
+    assert "✗" in status
+    assert "no es válido" in status
+
+    pack = tmp_path / "lite2obj-assets.l2oassets"
+    with zipfile.ZipFile(pack, "w") as archive:
+        archive.writestr(
+            assetpack.MANIFEST_NAME,
+            json.dumps({"format": 1, "minecraft_version": "26.3"}),
+        )
+    status, detail, color = _asset_status(pack)
+    assert "✓" in status
+    assert "configurados" in status
+    assert "Minecraft 26.3" in detail
+    assert color == "#58c27d"
 
 
 def test_resource_packs_in_directory(tmp_path):

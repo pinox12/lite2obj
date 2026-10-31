@@ -151,9 +151,9 @@ Pipeline order, each layer assuming the previous:
 - The GUI does not list schematics, packs or Minecraft installs: schematics come from the
   file dialog or drag-and-drop, resource packs are added explicitly with the file/folder
   dialog (multi-select for `.zip`, a folder can expand to all packs inside it; persisted in
-  `QSettings`, no disk scan) and assets come from the `.l2oassets`.
-  `_ensure_assets()` shows the instructions alert and offers to generate the pack from a
-  client jar chosen by the user.
+  `QSettings`, no disk scan) and assets come from the `.l2oassets`. `_asset_status()`
+  drives the ✓/✗ panel and the manifest's `minecraft_version`; `_ensure_assets()` shows the
+  instructions alert and offers to generate the pack from a client jar chosen by the user.
 - Use **Qt's own OpenGL classes** (`QOpenGLShaderProgram`, `QOpenGLBuffer`,
   `QOpenGLVertexArrayObject`, `QOpenGLTexture`, `QOpenGLFunctions`). Do not create an
   external GL context (moderngl/glcontext): it makes its own framebuffer and drawing is
