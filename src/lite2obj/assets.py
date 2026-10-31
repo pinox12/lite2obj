@@ -1,10 +1,10 @@
-"""Pila de recursos de Minecraft (client jar + resource packs).
+"""Pila de recursos de Minecraft basada en el archivo ``.l2oassets``.
 
-Resuelve rutas internas como ``assets/minecraft/models/block/oak_stairs.json`` aplicando
-la misma prioridad que Minecraft: los resource packs del usuario tienen prioridad sobre
-el jar vanilla, y cada asset se busca capa por capa (con fallback automático). Esto es
-importante porque permite usar packs antiguos (p. ej. 1.20) sobre un cliente nuevo: los
-assets que falten se toman del vanilla.
+Resuelve rutas internas como ``assets/minecraft/models/block/oak_stairs.json``. La fuente
+vanilla es siempre el archivo de assets; encima se pueden apilar resource packs indicados
+**explícitamente** por ruta. No se buscan instalaciones de Minecraft ni packs en el disco.
+Cada asset se busca capa por capa, así que un pack antiguo (p. ej. 1.20) puede usarse sobre
+un archivo vanilla más nuevo: lo que falte se toma del vanilla.
 """
 
 from __future__ import annotations
@@ -24,13 +24,14 @@ from . import assetpack, paths
 __all__ = [
     "DEFAULT_NAMESPACE",
     "DirSource",
+    "MISSING_ASSET_PACK_MESSAGE",
+    "InvalidAssetPackError",
     "MemorySource",
-    "PackInfo",
+    "MissingAssetPackError",
     "ResourceManager",
     "ResourceSource",
     "ZipSource",
     "blockstate_path",
-    "list_packs",
     "model_path",
     "parse_resource_id",
     "texture_path",
@@ -38,6 +39,25 @@ __all__ = [
 
 DEFAULT_NAMESPACE = "minecraft"
 _ASSETS = "assets"
+
+#: Texto que se muestra cuando falta el archivo de assets.
+MISSING_ASSET_PACK_MESSAGE = (
+    "No se encontraron las texturas de Minecraft.\n\n"
+    f"Falta el archivo {paths.ASSET_PACK_NAME}. El programa no busca instalaciones de "
+    "Minecraft ni resource packs en el disco.\n\n"
+    "Genera el archivo en un equipo con Minecraft instalado:\n"
+    "  lite2obj assets build --jar <ruta-al-client.jar>\n\n"
+    "Después colócalo junto al programa, en los datos del usuario o define "
+    "LITE2OBJ_ASSET_PACK."
+)
+
+
+class MissingAssetPackError(FileNotFoundError):
+    """No hay ningún archivo de assets disponible."""
+
+
+class InvalidAssetPackError(ValueError):
+    """El archivo de assets existe pero no es válido."""
 
 
 def parse_resource_id(
@@ -166,46 +186,6 @@ class MemorySource:
         return [k for k in self.entries if k.startswith(prefix)]
 
 
-@dataclass(slots=True)
-class PackInfo:
-    """Resource pack disponible en la máquina."""
-
-    name: str
-    path: Path
-    kind: str  # "zip" o "dir"
-
-    def as_source(self) -> ResourceSource:
-        return ZipSource(self.path) if self.kind == "zip" else DirSource(self.path)
-
-
-def list_packs() -> list[PackInfo]:
-    """Resource packs detectados, ordenados por nombre.
-
-    Si varios perfiles de Minecraft tienen una copia del mismo pack se conserva la primera
-    (en el orden de :func:`paths.resourcepack_dirs`), para que ``--packs NOMBRE`` sea
-    determinista.
-    """
-    packs: list[PackInfo] = []
-    seen_paths: set[Path] = set()
-    seen_names: set[str] = set()
-    for directory in paths.resourcepack_dirs():
-        for entry in sorted(directory.iterdir()):
-            if entry in seen_paths:
-                continue
-            if entry.is_file() and entry.suffix.lower() == ".zip":
-                info = PackInfo(name=entry.stem, path=entry, kind="zip")
-            elif entry.is_dir() and (entry / "assets").is_dir():
-                info = PackInfo(name=entry.name, path=entry, kind="dir")
-            else:
-                continue
-            if info.name.lower() in seen_names:
-                continue
-            seen_paths.add(entry)
-            seen_names.add(info.name.lower())
-            packs.append(info)
-    return sorted(packs, key=lambda p: p.name.lower())
-
-
 class ResourceManager:
     """Busca assets en una lista ordenada de fuentes (mayor prioridad primero)."""
 
@@ -226,60 +206,37 @@ class ResourceManager:
         *,
         asset_pack: str | Path | None = None,
     ) -> ResourceManager:
-        """Construye el gestor con el archivo de assets o, si falta, el client jar.
+        """Construye el gestor con el archivo de assets y packs explícitos.
 
-        ``packs`` se interpreta en orden de prioridad creciente (el último gana),
-        igual que la lista de packs de Minecraft. Los packs pueden indicarse por
-        nombre (``"Mizuno's ..."``) o por ruta.
+        ``packs`` contiene rutas a archivos ``.zip`` o carpetas de resource pack; el
+        último indicado tiene más prioridad. No se buscan packs por nombre ni en el disco.
 
-        El archivo ``.l2oassets`` es la fuente vanilla por defecto. Si no existe, se
-        usa el client jar detectado; ``LITE2OBJ_CLIENT_JAR`` sigue teniendo prioridad
-        para probar una versión concreta.
+        El archivo ``.l2oassets`` es obligatorio. Si falta, lanza
+        :class:`MissingAssetPackError` con instrucciones para generarlo; el renderizador
+        nunca cae al client jar.
         """
-        explicit_jar = paths.explicit_client_jar()
-        pack_path = Path(asset_pack) if asset_pack is not None else paths.asset_pack()
-        if asset_pack is None and explicit_jar is not None:
-            if not explicit_jar.is_file():
-                raise FileNotFoundError(
-                    f"LITE2OBJ_CLIENT_JAR no apunta a un archivo: {explicit_jar}"
-                )
-            base_source: ResourceSource = ZipSource(explicit_jar, name=explicit_jar.stem)
-        elif pack_path is not None:
-            if not assetpack.is_asset_pack(pack_path):
-                raise ValueError(
-                    f"El archivo de assets no es válido: {pack_path}. "
-                    "Genera uno con 'lite2obj assets build'."
-                )
-            base_source = ZipSource(pack_path, name=pack_path.stem)
-        else:
-            jar = paths.client_jar()
-            if jar is None:
-                raise FileNotFoundError(
-                    "No se encontró ningún client jar de Minecraft ni un archivo de assets. "
-                    "Genera uno con 'lite2obj assets build' o define LITE2OBJ_CLIENT_JAR."
-                )
-            base_source = ZipSource(jar, name=jar.stem)
+        pack_path = Path(asset_pack).expanduser() if asset_pack is not None else paths.asset_pack()
+        if pack_path is None:
+            raise MissingAssetPackError(MISSING_ASSET_PACK_MESSAGE)
+        if not assetpack.is_asset_pack(pack_path):
+            raise InvalidAssetPackError(
+                f"El archivo de assets no es válido: {pack_path}. "
+                "Genera uno con 'lite2obj assets build'."
+            )
 
-        available = list_packs()
-        by_name = {p.name.lower(): p for p in available}
-        selected: list[PackInfo] = []
+        selected: list[ResourceSource] = []
         for item in packs or []:
-            if isinstance(item, Path) or "/" in str(item) or str(item).endswith(".zip"):
-                path = Path(item)
-                kind = "zip" if path.suffix.lower() == ".zip" or path.is_file() else "dir"
-                selected.append(PackInfo(name=path.stem, path=path, kind=kind))
-                continue
-            info = by_name.get(str(item).lower())
-            if info is None:
-                raise FileNotFoundError(
-                    f"Resource pack no encontrado: {item!r}. Disponibles: "
-                    f"{[p.name for p in available]}"
-                )
-            selected.append(info)
+            path = Path(item).expanduser()
+            if path.is_file() and path.suffix.lower() == ".zip":
+                selected.append(ZipSource(path))
+            elif path.is_dir() and (path / _ASSETS).is_dir():
+                selected.append(DirSource(path))
+            else:
+                raise FileNotFoundError(f"Resource pack no válido: {path}")
 
         # Prioridad: packs (el último indicado gana) y, por debajo, los assets vanilla.
-        sources: list[ResourceSource] = [p.as_source() for p in reversed(selected)]
-        sources.append(base_source)
+        sources: list[ResourceSource] = list(reversed(selected))
+        sources.append(ZipSource(pack_path, name=pack_path.stem))
         return cls(sources)
 
     # -- acceso ------------------------------------------------------------ #

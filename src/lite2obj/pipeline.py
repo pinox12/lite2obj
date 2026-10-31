@@ -73,7 +73,7 @@ class RenderOptions:
 
 
 def build_resources(options: RenderOptions | None = None) -> ResourceManager:
-    """Resource manager con el jar vanilla y los resource packs indicados."""
+    """Resource manager con el archivo de assets y los resource packs indicados."""
     options = options or RenderOptions()
     return ResourceManager.discover(packs=list(options.packs))
 

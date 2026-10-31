@@ -428,6 +428,27 @@ def test_alias_applied_during_resolution():
     assert resolver.geometry(BlockState("minecraft:chain"))
 
 
+def test_alias_resolution_does_not_depend_on_cache_order():
+    manager = make_manager(
+        {
+            blockstate_path("minecraft:iron_chain"): {
+                "variants": {"": {"model": "minecraft:block/chain"}}
+            },
+            model_path("minecraft:block/chain"): _cube_model("minecraft:block/chain"),
+        }
+    )
+    resolver = ModelResolver(manager)
+    # Resolver primero el nombre actual no debe contaminar al alias cacheado.
+    canonical = resolver.resolve(BlockState("minecraft:iron_chain"))
+    alias = resolver.resolve(BlockState("minecraft:chain"))
+
+    assert not canonical.used_alias
+    assert canonical.block.name == "minecraft:iron_chain"
+    assert alias.used_alias
+    assert alias.block.name == "minecraft:chain"
+    assert alias.model_name == canonical.model_name
+
+
 # --------------------------------------------------------------------------- #
 # Utilidades de rutas
 # --------------------------------------------------------------------------- #

@@ -1,8 +1,9 @@
 """Aplicación de escritorio de lite2obj.
 
-Sustituye al antiguo visor web: todo el flujo (abrir esquemático, elegir resource packs,
-ajustar el render, previsualizar en 3D y exportar a OBJ) ocurre en una única ventana Qt.
-El renderizado 3D se hace en Python con el OpenGL nativo de Qt (:class:`QOpenGLWidget`).
+Todo el flujo (abrir un esquemático, ajustar el render, previsualizarlo en 3D y exportarlo
+a OBJ) ocurre en una única ventana Qt. El renderizado 3D se hace en Python con el OpenGL
+nativo de Qt (:class:`QOpenGLWidget`). No se buscan archivos en el disco: los esquemáticos
+se abren con el diálogo del sistema y las texturas salen del archivo ``.l2oassets``.
 """
 
 from __future__ import annotations
@@ -14,10 +15,9 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QRunnable, QSettings, Qt, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, QSettings, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QKeySequence, QPalette, QSurfaceFormat
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QApplication,
     QCheckBox,
     QColorDialog,
@@ -30,8 +30,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QProgressBar,
@@ -57,6 +55,7 @@ __all__ = ["MainWindow", "main", "run"]
 _LITEMATIC_FILTER = "Litematica (*.litematic);;Todos los archivos (*)"
 _PNG_FILTER = "PNG (*.png);;Todos los archivos (*)"
 _ASSET_PACK_FILTER = "Assets de lite2obj (*.l2oassets);;Todos los archivos (*)"
+_JAR_FILTER = "Minecraft client (*.jar);;Todos los archivos (*)"
 _DEMO_SCHEMATIC_NAME = "all_blocks_and_entities.litematic"
 
 
@@ -164,22 +163,17 @@ class MainWindow(QMainWindow):
         self.mesh: Mesh | None = None
         self._mesh_key: tuple | None = None
         self._resources: ResourceManager | None = None
-        self._resources_key: tuple[str, ...] | None = None
         self._dirty = False
         self._busy = False
         self._export_after_render = False
         self._task: Any = None
         self._task_key: tuple | None = None
         self._render_started = 0.0
-        self._packs_loading = False
         self._layers_guard = False
-        self._combo_guard = False
         self._pool = QThreadPool.globalInstance()
 
         self._build_ui()
-        self._load_packs()
         self._update_assets_label()
-        self._load_schematics()
 
         geometry = self.settings.value("geometry")
         if geometry is not None:
@@ -191,6 +185,8 @@ class MainWindow(QMainWindow):
         self.viewport.failed.connect(self._on_gl_error)
         if initial is not None:
             self.open_path(Path(initial))
+        elif self._asset_pack_path() is None:
+            QTimer.singleShot(0, self._show_missing_assets)
 
     # -- construcción de la interfaz --------------------------------------- #
 
@@ -227,12 +223,14 @@ class MainWindow(QMainWindow):
         # Esquemático
         schematic_group = QGroupBox("Esquemático")
         schematic_layout = QVBoxLayout(schematic_group)
-        self.schematic_combo = QComboBox()
-        self.schematic_combo.setToolTip("Esquemáticos .litematic encontrados en el disco")
-        schematic_layout.addWidget(self.schematic_combo)
+        hint = QLabel("Abre un .litematic o arrástralo sobre la ventana.")
+        hint.setWordWrap(True)
+        hint.setObjectName("hint")
+        schematic_layout.addWidget(hint)
         open_row = QHBoxLayout()
         self.open_button = QPushButton("Abrir…")
-        self.reload_button = QPushButton("Actualizar")
+        self.reload_button = QPushButton("Recargar")
+        self.reload_button.setToolTip("Vuelve a leer el esquemático actual")
         open_row.addWidget(self.open_button)
         open_row.addWidget(self.reload_button)
         schematic_layout.addLayout(open_row)
@@ -242,41 +240,34 @@ class MainWindow(QMainWindow):
         schematic_layout.addWidget(self.info_label)
         layout.addWidget(schematic_group)
 
-        # Resource packs
-        packs_group = QGroupBox("Resource packs")
-        packs_layout = QVBoxLayout(packs_group)
-        hint = QLabel("Arriba = mayor prioridad. Los assets que falten se toman del vanilla.")
-        hint.setWordWrap(True)
-        hint.setObjectName("hint")
-        packs_layout.addWidget(hint)
+        # Assets
+        assets_group = QGroupBox("Assets de Minecraft")
+        assets_layout = QVBoxLayout(assets_group)
+        assets_hint = QLabel(
+            "El programa usa el archivo .l2oassets incluido. Si falta, genéralo desde un "
+            "client jar."
+        )
+        assets_hint.setWordWrap(True)
+        assets_hint.setObjectName("hint")
+        assets_layout.addWidget(assets_hint)
         self.assets_label = QLabel()
         self.assets_label.setWordWrap(True)
         self.assets_label.setObjectName("hint")
-        packs_layout.addWidget(self.assets_label)
-        self.pack_list = QListWidget()
-        self.pack_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.pack_list.setFixedHeight(150)
-        self.pack_list.setToolTip("Marca los packs que quieres aplicar al render")
-        packs_layout.addWidget(self.pack_list)
-        pack_row = QHBoxLayout()
-        self.pack_up = QPushButton("Subir")
-        self.pack_down = QPushButton("Bajar")
-        self.pack_reload = QPushButton("Recargar")
-        pack_row.addWidget(self.pack_up)
-        pack_row.addWidget(self.pack_down)
-        pack_row.addWidget(self.pack_reload)
-        packs_layout.addLayout(pack_row)
-        layout.addWidget(packs_group)
+        assets_layout.addWidget(self.assets_label)
+        self.assets_button = QPushButton("Generar archivo de assets…")
+        self.assets_button.setToolTip("Elige el client jar de Minecraft y genera el .l2oassets")
+        assets_layout.addWidget(self.assets_button)
+        layout.addWidget(assets_group)
 
         self.dirty_label = QLabel("Hay cambios sin aplicar. Pulsa Renderizar (F5).")
         self.dirty_label.setObjectName("warning")
         self.dirty_label.setWordWrap(True)
         self.dirty_label.hide()
-        packs_layout.addWidget(self.dirty_label)
+        layout.addWidget(self.dirty_label)
 
         self.render_button = QPushButton("Renderizar")
         self.render_button.setToolTip("Vuelve a generar la malla con las opciones actuales (F5)")
-        packs_layout.addWidget(self.render_button)
+        layout.addWidget(self.render_button)
 
         # Vista
         view_group = QGroupBox("Vista y render")
@@ -440,7 +431,7 @@ class MainWindow(QMainWindow):
 
         self.assets_action = QAction("Generar archivo de assets…", self)
         self.assets_action.setToolTip(
-            "Extrae blockstates, modelos y texturas del client jar de Minecraft instalado"
+            "Elige el client jar de Minecraft y extrae blockstates, modelos y texturas"
         )
         self.assets_action.triggered.connect(lambda: self._generate_asset_pack())
 
@@ -502,13 +493,8 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         self.open_button.clicked.connect(lambda: self._open_dialog())
-        self.reload_button.clicked.connect(lambda: self._refresh_lists())
-        self.schematic_combo.activated.connect(self._combo_activated)
-
-        self.pack_reload.clicked.connect(lambda: self._load_packs())
-        self.pack_up.clicked.connect(lambda: self._move_pack(-1))
-        self.pack_down.clicked.connect(lambda: self._move_pack(1))
-        self.pack_list.itemChanged.connect(self._pack_changed)
+        self.reload_button.clicked.connect(lambda: self._reload_current())
+        self.assets_button.clicked.connect(lambda: self._generate_asset_pack())
 
         self.cull_check.toggled.connect(lambda: self.render_mesh())
         self.tint_check.toggled.connect(lambda: self.render_mesh())
@@ -532,112 +518,62 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(lambda: self.export())
         self.out_dir_button.clicked.connect(lambda: self._pick_out_dir())
 
-    # -- listas ------------------------------------------------------------ #
+    # -- assets ------------------------------------------------------------ #
 
-    def _load_schematics(self) -> None:
-        current = self.path
-        self._combo_guard = True
-        self.schematic_combo.clear()
-        found = paths.find_schematics()
-        if not found:
-            self.schematic_combo.addItem("No se encontraron .litematic")
-        for path in found:
-            self.schematic_combo.addItem(path.name, str(path))
-            self.schematic_combo.setItemData(
-                self.schematic_combo.count() - 1, str(path), Qt.ItemDataRole.ToolTipRole
-            )
-        if current is not None:
-            index = self.schematic_combo.findData(str(current))
-            if index >= 0:
-                self.schematic_combo.setCurrentIndex(index)
-        self._combo_guard = False
-
-    def _load_packs(self) -> None:
-        checked = self._checked_pack_names()
-        self._packs_loading = True
-        self.pack_list.clear()
-        for pack in assets.list_packs():
-            item = QListWidgetItem(pack.name)
-            item.setFlags(
-                item.flags()
-                | Qt.ItemFlag.ItemIsUserCheckable
-                | Qt.ItemFlag.ItemIsSelectable
-                | Qt.ItemFlag.ItemIsEnabled
-            )
-            item.setCheckState(
-                Qt.CheckState.Checked if pack.name in checked else Qt.CheckState.Unchecked
-            )
-            item.setToolTip(str(pack.path))
-            self.pack_list.addItem(item)
-        self._packs_loading = False
-        if checked:
-            self._invalidate()
+    def _asset_pack_path(self) -> Path | None:
+        pack = paths.asset_pack()
+        if pack is not None and assetpack.is_asset_pack(pack):
+            return pack
+        return None
 
     def _update_assets_label(self) -> None:
         pack = paths.asset_pack()
-        if pack is not None:
-            manifest = assetpack.read_manifest(pack) or {}
-            version = manifest.get("minecraft_version", "?")
-            self.assets_label.setText(f"Assets: Minecraft {version} · {pack.name}")
+        if pack is None:
+            self.assets_label.setText(
+                "Assets: no encontrados. Genera el archivo desde un client jar."
+            )
+            self.assets_label.setToolTip("")
+            return
+        if not assetpack.is_asset_pack(pack):
+            self.assets_label.setText("Assets: el archivo no es válido. Genera uno nuevo.")
             self.assets_label.setToolTip(str(pack))
             return
-        jar = paths.client_jar()
-        if jar is not None:
-            self.assets_label.setText(f"Assets: client jar {jar.name}")
-            self.assets_label.setToolTip(str(jar))
-            return
-        self.assets_label.setText(
-            "Assets: no encontrados. Usa Archivo → Generar archivo de assets…"
+        manifest = assetpack.read_manifest(pack) or {}
+        version = manifest.get("minecraft_version", "?")
+        self.assets_label.setText(f"Assets: Minecraft {version} · {pack.name}")
+        self.assets_label.setToolTip(str(pack))
+
+    def _ensure_assets(self) -> bool:
+        if self._asset_pack_path() is not None:
+            return True
+        self._show_missing_assets()
+        return False
+
+    def _show_missing_assets(self) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle("Faltan las texturas de Minecraft")
+        box.setText("No se encontró el archivo de assets de Minecraft.")
+        box.setInformativeText(
+            f"{assets.MISSING_ASSET_PACK_MESSAGE}\n\n"
+            "También puedes generarlo ahora eligiendo el client jar."
         )
-        self.assets_label.setToolTip("")
+        generate = box.addButton("Generar ahora…", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Cerrar", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is generate:
+            self._generate_asset_pack()
 
-    def _refresh_lists(self) -> None:
-        paths.resourcepack_dirs.cache_clear()
-        paths.schematic_dirs.cache_clear()
-        paths.asset_pack.cache_clear()
-        self._load_schematics()
-        self._load_packs()
-        self._update_assets_label()
-        self.status_label.setText("Listas actualizadas")
-
-    def _checked_pack_names(self) -> list[str]:
-        names: list[str] = []
-        for index in range(self.pack_list.count()):
-            item = self.pack_list.item(index)
-            if item.checkState() == Qt.CheckState.Checked:
-                names.append(item.text())
-        return names
-
-    def _selected_packs(self) -> list[str]:
-        # La lista se muestra con la mayor prioridad arriba, pero ``discover`` interpreta
-        # la lista de menor a mayor prioridad (el último gana).
-        return list(reversed(self._checked_pack_names()))
-
-    def _combo_activated(self, index: int) -> None:
-        if self._combo_guard:
+    def _reload_current(self) -> None:
+        if self._busy or self.path is None:
             return
-        path = self.schematic_combo.itemData(index)
-        if path:
-            self.open_path(Path(path))
-
-    def _move_pack(self, delta: int) -> None:
-        row = self.pack_list.currentRow()
-        target = row + delta
-        if row < 0 or not (0 <= target < self.pack_list.count()):
-            return
-        item = self.pack_list.takeItem(row)
-        self.pack_list.insertItem(target, item)
-        self.pack_list.setCurrentRow(target)
-        if item.checkState() == Qt.CheckState.Checked:
-            self._invalidate()
-
-    def _pack_changed(self, _item: QListWidgetItem) -> None:
-        if not self._packs_loading:
-            self._invalidate()
+        self.open_path(self.path)
 
     # -- apertura y render -------------------------------------------------- #
 
     def open_path(self, path: Path) -> None:
+        if not self._ensure_assets():
+            return
         try:
             document = litematic.load(path)
         except Exception:
@@ -656,14 +592,6 @@ class MainWindow(QMainWindow):
             self.name_edit.setText(_clean_name(document.name or path.stem))
         self._update_info()
         self._configure_layers(document.enclosing_size[1])
-
-        index = self.schematic_combo.findData(str(path))
-        if index < 0:
-            self.schematic_combo.addItem(path.name, str(path))
-            index = self.schematic_combo.count() - 1
-        self._combo_guard = True
-        self.schematic_combo.setCurrentIndex(index)
-        self._combo_guard = False
         self.render_mesh()
 
     def _update_info(self) -> None:
@@ -702,7 +630,6 @@ class MainWindow(QMainWindow):
 
     def _render_options(self) -> RenderOptions:
         return RenderOptions(
-            packs=self._selected_packs(),
             cull=self.cull_check.isChecked(),
             tint=self.tint_check.isChecked(),
             atlas_scale=int(self.atlas_scale_combo.currentData()),
@@ -714,7 +641,6 @@ class MainWindow(QMainWindow):
     def _render_key(self) -> tuple:
         return (
             str(self.path),
-            tuple(self._selected_packs()),
             self.cull_check.isChecked(),
             self.tint_check.isChecked(),
             int(self.atlas_scale_combo.currentData()),
@@ -728,10 +654,11 @@ class MainWindow(QMainWindow):
             return
         if self._busy:
             return
+        if not self._ensure_assets():
+            return
         options = self._render_options()
         key = self._render_key()
-        resources = self._resources if self._resources_key == tuple(options.packs) else None
-        task = RenderTask(self.path, options, resources)
+        task = RenderTask(self.path, options, self._resources)
         task.signals.finished.connect(self._on_mesh)
         task.signals.failed.connect(self._on_error)
         task.signals.progress.connect(self._on_progress)
@@ -764,8 +691,6 @@ class MainWindow(QMainWindow):
             self.dirty_label.hide()
 
         self._resources = mesh.atlas.resources
-        if self._task_key is not None:
-            self._resources_key = tuple(self._task_key[1])
         if self._export_after_render:
             self._export_after_render = False
             if self._dirty:
@@ -802,6 +727,8 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Abre un esquemático antes de exportar")
             return
         if self._busy:
+            return
+        if not self._ensure_assets():
             return
         if self.mesh is None or self._dirty or self._mesh_key != self._render_key():
             self._export_after_render = True
@@ -932,13 +859,17 @@ class MainWindow(QMainWindow):
         if self._busy:
             self.status_label.setText("Espera a que termine la operación actual")
             return
-        jar = paths.client_jar()
-        if jar is None:
-            self._show_error(
-                "No se encontró Minecraft en este ordenador.",
-                "Instala Minecraft (o define LITE2OBJ_CLIENT_JAR) y vuelve a intentarlo.",
-            )
+        start = str(self.settings.value("last_jar_dir", str(Path.home())))
+        jar_path, _ = QFileDialog.getOpenFileName(
+            self, "Selecciona el client jar de Minecraft", start, _JAR_FILTER
+        )
+        if not jar_path:
             return
+        jar = Path(jar_path)
+        if not jar.is_file():
+            self._show_error("No se pudo leer el client jar.", str(jar))
+            return
+        self.settings.setValue("last_jar_dir", str(jar.parent))
 
         default = paths.asset_pack_output()
         default.parent.mkdir(parents=True, exist_ok=True)
@@ -963,9 +894,10 @@ class MainWindow(QMainWindow):
         self._task = None
         self._set_busy(False)
         # El gestor y la detección cachean las fuentes; hay que recrearlos para que
-        # usen el archivo recién generado.
+        # usen el archivo recién generado. Si se guardó fuera de las rutas habituales,
+        # la variable de entorno hace que esta sesión lo encuentre.
+        os.environ["LITE2OBJ_ASSET_PACK"] = str(info.path)
         self._resources = None
-        self._resources_key = None
         paths.asset_pack.cache_clear()
         self._update_assets_label()
         self._dirty = self.mesh is not None
@@ -1011,7 +943,7 @@ class MainWindow(QMainWindow):
             "lite2obj\n\n"
             "Renderiza esquemáticos de Litematica y los exporta a OBJ + MTL + atlas "
             "para Blender.\n\n"
-            "Python + PySide6 + OpenGL de Qt · archivo de assets, client jar y resource packs.",
+            "Python + PySide6 + OpenGL de Qt · texturas del archivo de assets.",
         )
 
     # -- estado ocupado / cierre ------------------------------------------- #
@@ -1026,7 +958,7 @@ class MainWindow(QMainWindow):
         ):
             widget.setEnabled(not busy)
         self.assets_action.setEnabled(not busy)
-        self.schematic_combo.setEnabled(not busy)
+        self.assets_button.setEnabled(not busy)
         self.progress.setVisible(busy)
         if busy:
             self.progress.setRange(0, 0)

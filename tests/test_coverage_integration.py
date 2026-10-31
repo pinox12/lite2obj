@@ -1,24 +1,25 @@
-"""Cobertura de resolución de modelos sobre los esquemáticos reales (F2).
+"""Cobertura de resolución de modelos sobre el esquemático de referencia (F2).
 
-Requiere a la vez un client jar y archivos ``.litematic`` en la máquina. Mide el
-porcentaje de instancias de bloque para las que se puede generar geometría; el objetivo
-del plan es superar el 99.9%.
+Requiere el archivo de assets y ``all_blocks_and_entities.litematic``. Mide el porcentaje
+de instancias de bloque para las que se puede generar geometría; el objetivo del plan es
+superar el 99.9%.
 """
 
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 
 import pytest
 from _jar import jar_resources
 
-from lite2obj import litematic, paths
+from lite2obj import litematic
 from lite2obj.models import BlockModelError, ModelResolver
 
-SCHEMATICS = paths.find_schematics()
+SCHEMATICS = [Path(__file__).resolve().parents[1] / "all_blocks_and_entities.litematic"]
 
 pytestmark = pytest.mark.skipif(
-    not SCHEMATICS, reason="no se encontraron archivos .litematic en la máquina"
+    not SCHEMATICS[0].is_file(), reason="no se encontró el esquemático de referencia"
 )
 
 
@@ -30,7 +31,6 @@ def resolver() -> ModelResolver:
 def _scan(resolver: ModelResolver):
     total = 0
     unsupported: Counter[str] = Counter()
-    alias_count = 0
     for path in SCHEMATICS:
         doc = litematic.load(path)
         for region in doc.regions:
@@ -42,18 +42,15 @@ def _scan(resolver: ModelResolver):
                     continue
                 total += int(count)
                 try:
-                    state = resolver.resolve(block)
-                    if state.used_alias:
-                        alias_count += int(count)
                     if not resolver.geometry(block):
                         unsupported[block.name] += int(count)
                 except BlockModelError:
                     unsupported[block.name] += int(count)
-    return total, unsupported, alias_count
+    return total, unsupported
 
 
 def test_geometry_coverage_over_real_schematics(resolver):
-    total, unsupported, _ = _scan(resolver)
+    total, unsupported = _scan(resolver)
     assert total > 0
     covered = total - sum(unsupported.values())
     ratio = covered / total
@@ -63,7 +60,7 @@ def test_geometry_coverage_over_real_schematics(resolver):
 
 
 def test_unsupported_blocks_are_unknown_mods(resolver):
-    _, unsupported, _ = _scan(resolver)
+    _, unsupported = _scan(resolver)
     # Lo único que no se cubre debe ser de namespaces que no son vanilla.
     for name in unsupported:
         namespace, _, _ = name.partition(":")
@@ -71,5 +68,11 @@ def test_unsupported_blocks_are_unknown_mods(resolver):
 
 
 def test_alias_is_used_for_renamed_blocks(resolver):
-    _, _, alias_count = _scan(resolver)
-    assert alias_count > 0
+    # El esquemático de referencia ya usa los identificadores actuales, así que aquí se
+    # comprueba el alias directamente contra los assets reales: ``grass`` se renombró a
+    # ``short_grass`` y debe seguir generando geometría.
+    block = litematic.BlockState("minecraft:grass")
+    state = resolver.resolve(block)
+    assert state.used_alias
+    assert state.model_name == "minecraft:short_grass"
+    assert resolver.geometry(block)

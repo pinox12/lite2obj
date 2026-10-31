@@ -13,7 +13,7 @@ uv run pytest tests/test_mesh.py::test_name    # one test
 uv run ruff format . && uv run ruff check .
 uv run mypy src                                # config already limits to src
 uv run lite2obj info|list|export|gui ...
-uv run lite2obj assets build|info
+uv run lite2obj assets build --jar <client.jar>|info
 ```
 
 There is no CI or pre-commit: run ruff, mypy and pytest yourself before committing.
@@ -30,33 +30,38 @@ Python is 3.14; dependencies live in `uv.lock` (no pip/poetry). There is no JS/N
 ## Tests: a green run may have tested nothing
 
 - Real-asset tests are **asset-gated**: they call `tests/_jar.py::jar_resources()`, which
-  `pytest.skip`s when there is neither a `.l2oassets` file nor a Minecraft client jar. A
-  green suite on a fresh machine can mean the model/texture/mesh pipeline was never
-  exercised.
+  `pytest.skip`s when there is no `.l2oassets` file. A green suite on a fresh machine can
+  mean the model/texture/mesh pipeline was never exercised.
 - `tests/conftest.py` puts `tests/` on `sys.path`, so helpers are imported top-level:
   `from _jar import jar_resources`, `from nbt_writer import write_nbt` (not `tests._jar`).
 - Committed fixture: `tests/fixtures/store_1x4x4.litematic`.
   `tests/test_export.py::test_real_fixture_golden_counts` hard-codes mesh/OBJ counts for
   vanilla 26.3 — update it deliberately when geometry or culling changes.
-- `test_schematics_integration.py` / `test_coverage_integration.py` scan the machine's
-  schematic folders and skip if none exist. `LITE2OBJ_SCHEMATICS` **adds** directories
-  (colon-separated); it does not replace discovery.
+- `test_schematics_integration.py` / `test_coverage_integration.py` use the committed
+  `all_blocks_and_entities.litematic` at the repo root and skip if it is missing. They do
+  not scan the machine for schematics.
 
 ## Architecture and invariants
 
 Pipeline order, each layer assuming the previous:
 `paths` → `assets` → `models` → `textures` → `mesh` → `export`/`pipeline` → `cli`/`gui`.
 
-- `assets.py` stacks the vanilla source (`.l2oassets` if present, otherwise the client jar)
-  plus resource packs, falling back **per asset** to vanilla. `assetpack.py` builds and
-  validates the `.l2oassets` archive. `LITE2OBJ_*` variables override auto-discovery (see
-  the `paths.py` docstring).
+- `paths.py` locates the `.l2oassets` without scanning the disk: `LITE2OBJ_ASSET_PACK`,
+  PyInstaller bundle, executable folder and user data, in that order. `assets.py` **requires**
+  that file and stacks it with resource packs passed explicitly by path (the last one wins);
+  it never falls back to a client jar. `assetpack.py` builds and validates the archive;
+  `lite2obj assets build` requires `--jar` or `LITE2OBJ_CLIENT_JAR`. There is no Minecraft,
+  resource-pack or schematic auto-discovery anywhere.
 - `models.py` resolves blockstates (variants/multipart), parent inheritance and model/
   element rotations. Variants are chosen **per position** (`position_seed`), not once per
   state. Each multipart group contributes **one** variant; emitting all weighted variants
   overlaps them. Variant `x`/`y` rotations use Minecraft's inverted signs (`rot_x`/`rot_y`),
   but an element `rotation` follows the JOML right-hand rule (`rot_axis`). Mixing the two
   folds the tripwire hook below its block.
+  `ModelResolver.resolve()` caches by `(original name, normalized state)`, not just the
+  normalized state: alias and canonical blocks share geometry, but `ResolvedState.block`
+  must stay the one requested so `used_alias` and culling with legacy names are correct.
+  The variant seed still comes from the normalized state.
 - `mesh.py` is the delicate part:
   - A `cullface` face is emitted unless the neighbour is a full opaque cube. `covers` is
     computed per element; `_is_full_cube` accepts 90°-multiple rotations but rejects
@@ -143,6 +148,10 @@ Pipeline order, each layer assuming the previous:
 
 - Native desktop app: `gui/app.py` (window + `QThreadPool` tasks), `gui/viewport.py`
   (`QOpenGLWidget`), `gui/camera.py` (orbit camera + matrices).
+- The GUI does not list schematics, packs or Minecraft installs: schematics come from the
+  file dialog or drag-and-drop, resource packs are CLI-only (`--packs`), and assets come
+  from the `.l2oassets`. `_ensure_assets()` shows the instructions alert and offers to
+  generate the pack from a client jar chosen by the user.
 - Use **Qt's own OpenGL classes** (`QOpenGLShaderProgram`, `QOpenGLBuffer`,
   `QOpenGLVertexArrayObject`, `QOpenGLTexture`, `QOpenGLFunctions`). Do not create an
   external GL context (moderngl/glcontext): it makes its own framebuffer and drawing is

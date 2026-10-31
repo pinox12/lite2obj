@@ -95,9 +95,6 @@ def test_resource_manager_uses_the_asset_pack_without_minecraft(tmp_path, monkey
     assetpack.build_asset_pack(jar, pack)
 
     monkeypatch.setattr(paths, "asset_pack", lambda: pack)
-    monkeypatch.setattr(paths, "explicit_client_jar", lambda: None)
-    monkeypatch.setattr(paths, "client_jar", lambda: None)
-    monkeypatch.setattr(assets, "list_packs", lambda: [])
 
     manager = assets.ResourceManager.discover()
 
@@ -106,18 +103,29 @@ def test_resource_manager_uses_the_asset_pack_without_minecraft(tmp_path, monkey
     assert manager.read_texture("minecraft:block/stone") is None  # el PNG de prueba no es válido
 
 
-def test_explicit_client_jar_still_has_priority(tmp_path, monkeypatch):
+def test_missing_asset_pack_raises_helpful_error(monkeypatch):
+    monkeypatch.setattr(paths, "asset_pack", lambda: None)
+
+    with pytest.raises(assets.MissingAssetPackError, match="texturas"):
+        assets.ResourceManager.discover()
+
+
+def test_explicit_resource_pack_path_has_priority(tmp_path, monkeypatch):
     jar = _fake_jar(tmp_path)
     pack = tmp_path / "minecraft.l2oassets"
     assetpack.build_asset_pack(jar, pack)
 
+    resource_pack = tmp_path / "mi_pack"
+    blockstate = resource_pack / "assets" / "minecraft" / "blockstates" / "stone.json"
+    blockstate.parent.mkdir(parents=True)
+    blockstate.write_text('{"variants": {}}')
+
     monkeypatch.setattr(paths, "asset_pack", lambda: pack)
-    monkeypatch.setattr(paths, "explicit_client_jar", lambda: jar)
-    monkeypatch.setattr(assets, "list_packs", lambda: [])
 
-    manager = assets.ResourceManager.discover()
+    manager = assets.ResourceManager.discover(packs=[resource_pack])
 
-    assert manager.names == ["client"]
+    assert manager.names == ["mi_pack", "minecraft"]
+    assert manager.read("assets/minecraft/blockstates/stone.json") == b'{"variants": {}}'
 
 
 def test_asset_pack_env_override(tmp_path, monkeypatch):

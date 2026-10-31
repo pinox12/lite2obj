@@ -567,7 +567,7 @@ class ModelResolver:
         self.fallbacks = FallbackResolver(mode=fallback_mode)
         self._blockstates: dict[str, BlockStateDefinition] = {}
         self._raw_models: dict[str, ResolvedModel] = {}
-        self._states: dict[str, ResolvedState] = {}
+        self._states: dict[tuple[str, str], ResolvedState] = {}
 
     # -- blockstates ------------------------------------------------------- #
 
@@ -593,7 +593,11 @@ class ModelResolver:
         """
         target = normalize_block_name(block.name)
         props = rename_properties(block.name, block.properties_dict())
-        key = f"{target}[{','.join(f'{k}={v}' for k, v in sorted(props.items()))}]"
+        variant_key = f"{target}[{','.join(f'{k}={v}' for k, v in sorted(props.items()))}]"
+        # La caché distingue el nombre original: dos bloques que son alias entre sí
+        # comparten geometría, pero ``ResolvedState.block`` debe seguir siendo el que se
+        # pidió para que ``used_alias`` y el culling con nombres antiguos sean correctos.
+        key = (block.name, variant_key)
         cached = self._states.get(key)
         if cached is not None:
             return cached
@@ -603,7 +607,7 @@ class ModelResolver:
             block=block,
             groups=definition.select_groups(props),
             model_name=target,
-            seed=zlib.crc32(key.encode("utf-8")) & 0x7FFFFFFF,
+            seed=zlib.crc32(variant_key.encode("utf-8")) & 0x7FFFFFFF,
         )
         self._states[key] = resolved
         return resolved

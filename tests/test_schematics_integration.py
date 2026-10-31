@@ -1,20 +1,21 @@
-"""Integración: valida el parser contra todos los ``.litematic`` de la máquina.
+"""Integración: valida el parser contra el esquemático de referencia.
 
-Se omite automáticamente si no se encuentra ninguno. Comprueba que cada archivo parsea
-sin excepciones, que el recuento de bloques coincide con ``Metadata.TotalBlocks`` y que
-las dimensiones son coherentes.
+Comprueba que el archivo parsea sin excepciones, que el recuento de bloques coincide con
+``Metadata.TotalBlocks`` y que las dimensiones son coherentes.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from lite2obj import litematic, paths
+from lite2obj import litematic
 
-SCHEMATICS = paths.find_schematics()
+SCHEMATICS = [Path(__file__).resolve().parents[1] / "all_blocks_and_entities.litematic"]
 
 pytestmark = pytest.mark.skipif(
-    not SCHEMATICS, reason="no se encontraron archivos .litematic en la máquina"
+    not SCHEMATICS[0].is_file(), reason="no se encontró el esquemático de referencia"
 )
 
 

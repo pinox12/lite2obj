@@ -1,8 +1,8 @@
-"""Helper para tests que necesitan assets reales de Minecraft.
+"""Helper para tests que necesitan los assets reales de Minecraft.
 
-Usa el archivo ``.l2oassets`` o, si no existe, el client jar. Se omiten (``skip``) si no
-hay ninguno de los dos, de modo que la batería de tests unitarios sigue funcionando en
-cualquier máquina.
+Usa el archivo ``.l2oassets``; no busca client jars ni instalaciones. Se omiten
+(``skip``) si no hay archivo, de modo que la batería de tests unitarios sigue funcionando
+en cualquier máquina.
 """
 
 from __future__ import annotations
@@ -27,13 +27,13 @@ def _resources() -> ResourceManager | None:
 
 @lru_cache(maxsize=1)
 def _available() -> bool:
-    return paths.asset_pack() is not None or paths.client_jar() is not None
+    return paths.asset_pack() is not None
 
 
 def jar_resources() -> ResourceManager:
-    """ResourceManager con assets reales, o ``pytest.skip`` si no hay ninguno."""
+    """ResourceManager con el archivo de assets, o ``pytest.skip`` si no hay."""
     if not _available():
-        pytest.skip("no se encontró ningún archivo de assets ni client jar de Minecraft")
+        pytest.skip("no se encontró ningún archivo de assets de Minecraft")
     resources = _resources()
     assert resources is not None
     return resources

@@ -1692,9 +1692,7 @@ def test_real_fixture_mesh():
     from _jar import jar_resources
 
     from lite2obj import litematic as litematic_module
-    from lite2obj.paths import find_schematics
 
-    del find_schematics
     fixture = "tests/fixtures/store_1x4x4.litematic"
     doc = litematic_module.load(fixture)
     builder = MeshBuilder(ModelResolver(jar_resources()))

@@ -11,10 +11,10 @@ from lite2obj.cli import main
 FIXTURE = Path(__file__).parent / "fixtures" / "store_1x4x4.litematic"
 
 
-def _has_jar() -> bool:
+def _has_assets() -> bool:
     from lite2obj import paths
 
-    return paths.client_jar() is not None
+    return paths.asset_pack() is not None
 
 
 def test_version_exits(capsys):
@@ -45,22 +45,20 @@ def test_info_missing_file_exits_with_error():
 
 def test_list_runs(capsys):
     code = main(["list"])
-    out = capsys.readouterr().out
+    captured = capsys.readouterr()
     assert code in (0, 1)
-    assert ".litematic" in out or "No se encontraron" in out
+    assert "Archivo de assets" in captured.out or "texturas" in captured.err
 
 
-def test_list_with_packs(capsys):
-    main(["list", "--packs"])
-    assert (
-        "Resource packs" in capsys.readouterr().out
-        or "No se encontraron" in capsys.readouterr().out
-    )
+def test_list_does_not_scan_schematics(capsys):
+    main(["list"])
+    output = capsys.readouterr().out
+    assert ".litematic" not in output
 
 
 def test_export_writes_files(tmp_path, capsys):
-    if not _has_jar():
-        pytest.skip("no hay client jar")
+    if not _has_assets():
+        pytest.skip("no hay archivo de assets")
     code = main(["export", str(FIXTURE), str(tmp_path), "--name", "cosa", "--group-by", "block"])
     assert code == 0
     out = capsys.readouterr().out
@@ -71,8 +69,8 @@ def test_export_writes_files(tmp_path, capsys):
 
 
 def test_export_default_destination(tmp_path, capsys):
-    if not _has_jar():
-        pytest.skip("no hay client jar")
+    if not _has_assets():
+        pytest.skip("no hay archivo de assets")
     import shutil
 
     copied = tmp_path / FIXTURE.name
@@ -85,15 +83,16 @@ def test_export_default_destination(tmp_path, capsys):
 
 
 def test_export_z_up_and_no_cull(tmp_path, capsys):
-    if not _has_jar():
-        pytest.skip("no hay client jar")
+    if not _has_assets():
+        pytest.skip("no hay archivo de assets")
     assert main(["export", str(FIXTURE), str(tmp_path), "--z-up", "--no-cull", "--no-tint"]) == 0
     assert "caras" in capsys.readouterr().out
     assert list(tmp_path.glob("*.obj"))
 
 
-def test_export_unknown_pack_fails(tmp_path):
-    if not _has_jar():
-        pytest.skip("no hay client jar")
-    with pytest.raises(FileNotFoundError):
-        main(["export", str(FIXTURE), str(tmp_path), "--packs", "pack inexistente"])
+def test_export_unknown_pack_fails(tmp_path, capsys):
+    if not _has_assets():
+        pytest.skip("no hay archivo de assets")
+    code = main(["export", str(FIXTURE), str(tmp_path), "--packs", "pack inexistente"])
+    assert code == 1
+    assert "Resource pack no válido" in capsys.readouterr().err

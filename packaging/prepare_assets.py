@@ -2,7 +2,8 @@
 
 Los scripts de empaquetado lo llaman antes de PyInstaller. Si ya existe en
 ``build/assets`` se respeta; si no, copia el que usa lite2obj (datos del usuario o
-``LITE2OBJ_ASSET_PACK``); y si tampoco existe, lo genera desde el client jar detectado.
+``LITE2OBJ_ASSET_PACK``); y si tampoco existe, lo genera desde el client jar indicado con
+``--jar`` o ``LITE2OBJ_CLIENT_JAR``.
 
 Con ``--force`` ignora el archivo existente y lo regenera desde el client jar, útil
 después de actualizar Minecraft.
@@ -30,6 +31,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="regenera el archivo desde el client jar aunque ya exista",
     )
+    parser.add_argument(
+        "--jar",
+        type=Path,
+        default=None,
+        help="client jar de Minecraft (por defecto, LITE2OBJ_CLIENT_JAR)",
+    )
     args = parser.parse_args(argv)
 
     target = TARGET_DIR / paths.ASSET_PACK_NAME
@@ -48,11 +55,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Minecraft {version}")
         return 0
 
-    jar = paths.client_jar()
+    jar = args.jar.expanduser() if args.jar is not None else paths.explicit_client_jar()
     if jar is None:
         print(
             "No hay archivo de assets ni client jar de Minecraft. "
-            "Genera uno con 'uv run lite2obj assets build' o define LITE2OBJ_ASSET_PACK.",
+            "Usa --jar <ruta> o define LITE2OBJ_CLIENT_JAR.",
             file=sys.stderr,
         )
         return 1
