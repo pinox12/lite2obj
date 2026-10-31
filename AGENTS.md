@@ -150,7 +150,8 @@ Pipeline order, each layer assuming the previous:
   (`QOpenGLWidget`), `gui/camera.py` (orbit camera + matrices).
 - The GUI does not list schematics, packs or Minecraft installs: schematics come from the
   file dialog or drag-and-drop, resource packs are added explicitly with the file/folder
-  dialog (persisted in `QSettings`, no disk scan) and assets come from the `.l2oassets`.
+  dialog (multi-select for `.zip`, a folder can expand to all packs inside it; persisted in
+  `QSettings`, no disk scan) and assets come from the `.l2oassets`.
   `_ensure_assets()` shows the instructions alert and offers to generate the pack from a
   client jar chosen by the user.
 - Use **Qt's own OpenGL classes** (`QOpenGLShaderProgram`, `QOpenGLBuffer`,

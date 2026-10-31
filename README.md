@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 288 tests |
+| F8 | Tests | ✅ 289 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -296,9 +296,9 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
   buscan `.litematic` por el disco.
 - **Assets de Minecraft**: muestra el archivo activo y permite generarlo eligiendo el client
   jar. Si falta, la app avisa con las instrucciones.
-- **Resource packs**: opcional; se añaden a mano con *Añadir .zip…* o *Añadir carpeta…*,
-  se activan con casillas y se ordenan con *Subir*/*Bajar*. Arriba = mayor prioridad y no
-  se buscan packs en el disco.
+- **Resource packs**: opcional; se añaden a mano con *Añadir .zip…* (varios a la vez) o
+  *Añadir carpeta…* (un pack o una carpeta con varios), se activan con casillas y se
+  ordenan con *Subir*/*Bajar*. Arriba = mayor prioridad y no se buscan packs en el disco.
 - **Vista y render**: descartar caras ocultas, *backface culling* como Minecraft, tintes de
   bioma, entidades y *block entities*, criaturas (desactivadas por defecto), resolución del
   atlas (×1/×2/×4), texturas suavizadas, rejilla, ejes, wireframe y corte por capas Y.

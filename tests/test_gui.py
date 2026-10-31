@@ -81,6 +81,26 @@ def test_resource_pack_path_validation(tmp_path):
     assert not _is_resource_pack(tmp_path / "no-existe")
 
 
+def test_resource_packs_in_directory(tmp_path):
+    from lite2obj.gui.app import _resource_packs_in
+
+    base = tmp_path / "resourcepacks"
+    base.mkdir()
+    for name in ("Zeta", "alfa"):
+        (base / name / "assets").mkdir(parents=True)
+    (base / "pack.zip").write_bytes(b"PK")
+    (base / "no_pack").mkdir()
+
+    found = _resource_packs_in(base)
+    assert [path.name for path in found] == ["alfa", "pack.zip", "Zeta"]
+
+    # Una carpeta que ya es un pack se devuelve tal cual, sin mirar dentro.
+    pack = base / "alfa"
+    (pack / "assets" / "otro").mkdir(parents=True)
+    assert _resource_packs_in(pack) == [pack]
+    assert _resource_packs_in(tmp_path / "no-existe") == []
+
+
 def test_orbit_pan_zoom_change_camera():
     camera = OrbitCamera()
     camera.fit((16, 16, 16))

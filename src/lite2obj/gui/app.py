@@ -71,6 +71,27 @@ def _is_resource_pack(path: Path) -> bool:
     return path.is_dir() and (path / "assets").is_dir()
 
 
+def _resource_packs_in(path: Path) -> list[Path]:
+    """Packs que hay en ``path``: el propio pack o sus hijos inmediatos.
+
+    Permite elegir una carpeta que ya es un resource pack o una carpeta que contiene
+    varios (por ejemplo, la carpeta ``resourcepacks`` de un perfil de Modrinth/Prism).
+    No recorre subcarpetas más allá del primer nivel.
+    """
+    if _is_resource_pack(path):
+        return [path]
+    if not path.is_dir():
+        return []
+    try:
+        entries = list(path.iterdir())
+    except OSError:
+        return []
+    return sorted(
+        (entry for entry in entries if _is_resource_pack(entry)),
+        key=lambda entry: entry.name.lower(),
+    )
+
+
 def _demo_schematic_path() -> Path:
     """Ruta del esquemático de prueba incluido en el repositorio o en el bundle."""
     candidates: list[Path] = []
@@ -280,7 +301,8 @@ class MainWindow(QMainWindow):
         packs_layout = QVBoxLayout(packs_group)
         packs_hint = QLabel(
             "Opcional. Arriba = mayor prioridad. Los assets que falten se toman del "
-            "archivo vanilla."
+            "archivo vanilla. Puedes añadir varios .zip a la vez o una carpeta con varios "
+            "packs."
         )
         packs_hint.setWordWrap(True)
         packs_hint.setObjectName("hint")
@@ -292,9 +314,9 @@ class MainWindow(QMainWindow):
         packs_layout.addWidget(self.pack_list)
         add_row = QHBoxLayout()
         self.pack_add_file = QPushButton("Añadir .zip…")
-        self.pack_add_file.setToolTip("Añade un resource pack comprimido")
+        self.pack_add_file.setToolTip("Añade uno o varios resource packs comprimidos")
         self.pack_add_dir = QPushButton("Añadir carpeta…")
-        self.pack_add_dir.setToolTip("Añade un resource pack descomprimido")
+        self.pack_add_dir.setToolTip("Añade un pack o todos los que contenga una carpeta")
         add_row.addWidget(self.pack_add_file)
         add_row.addWidget(self.pack_add_dir)
         packs_layout.addLayout(add_row)
@@ -688,36 +710,67 @@ class MainWindow(QMainWindow):
     def _add_pack_dialog(self, as_dir: bool) -> None:
         start = str(self.settings.value("last_pack_dir", str(Path.home())))
         if as_dir:
-            chosen = QFileDialog.getExistingDirectory(self, "Añadir resource pack", start)
-        else:
-            chosen, _ = QFileDialog.getOpenFileName(
-                self, "Añadir resource pack", start, _PACK_FILTER
-            )
+            directory = QFileDialog.getExistingDirectory(self, "Añadir resource packs", start)
+            if not directory:
+                return
+            path = Path(directory)
+            self.settings.setValue("last_pack_dir", str(path))
+            self._add_pack_directory(path)
+            return
+        chosen, _ = QFileDialog.getOpenFileNames(self, "Añadir resource packs", start, _PACK_FILTER)
         if not chosen:
             return
-        path = Path(chosen)
-        self.settings.setValue("last_pack_dir", str(path if path.is_dir() else path.parent))
-        self._add_pack(path)
+        paths = [Path(item) for item in chosen]
+        self.settings.setValue("last_pack_dir", str(paths[0].parent))
+        self._add_packs(paths)
 
-    def _add_pack(self, path: Path) -> None:
-        path = path.expanduser()
-        if not _is_resource_pack(path):
+    def _add_pack_directory(self, directory: Path) -> None:
+        """Añade un pack o todos los packs que haya dentro de una carpeta elegida."""
+        packs = _resource_packs_in(directory)
+        if not packs:
             self._show_error(
-                "El resource pack no es válido.",
-                f"{path}\n\nDebe ser un archivo .zip o una carpeta con una subcarpeta 'assets'.",
+                "No se encontraron resource packs en la carpeta.",
+                f"{directory}\n\nElige un .zip, una carpeta con 'assets' o una carpeta "
+                "que contenga varios packs.",
             )
             return
-        key = str(path.resolve())
+        self._add_packs(packs)
+
+    def _add_packs(self, paths: list[Path]) -> None:
+        """Añade varios packs a la vez, sin duplicados y con una sola actualización."""
+        existing: set[str] = set()
         for index in range(self.pack_list.count()):
-            if self.pack_list.item(index).data(Qt.ItemDataRole.UserRole) == key:
-                self.pack_list.setCurrentRow(index)
-                return
-        # El pack nuevo entra con la prioridad más alta.
-        self._packs_loading = True
-        self._append_pack_item(path.resolve(), checked=True, index=0)
-        self._packs_loading = False
-        self.pack_list.setCurrentRow(0)
-        self._packs_changed()
+            key = self.pack_list.item(index).data(Qt.ItemDataRole.UserRole)
+            if key:
+                existing.add(str(key))
+        valid: list[Path] = []
+        invalid: list[Path] = []
+        for path in paths:
+            path = path.expanduser()
+            if not _is_resource_pack(path):
+                invalid.append(path)
+                continue
+            resolved = path.resolve()
+            key = str(resolved)
+            if key in existing:
+                continue
+            existing.add(key)
+            valid.append(resolved)
+        if valid:
+            # Se insertan en orden inverso para que el primero de la selección quede
+            # arriba, que es la mayor prioridad.
+            self._packs_loading = True
+            for path in reversed(valid):
+                self._append_pack_item(path, checked=True, index=0)
+            self._packs_loading = False
+            self.pack_list.setCurrentRow(0)
+            self._packs_changed()
+        if invalid:
+            self._show_error(
+                "Algunos resource packs no son válidos.",
+                "\n".join(str(path) for path in invalid)
+                + "\n\nDeben ser archivos .zip o carpetas con una subcarpeta 'assets'.",
+            )
 
     def _remove_pack(self) -> None:
         row = self.pack_list.currentRow()
