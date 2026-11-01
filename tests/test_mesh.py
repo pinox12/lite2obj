@@ -450,6 +450,35 @@ def test_single_cube_mesh_has_six_quads():
     assert mesh.atlas.image.size == builder.atlas.size
 
 
+def test_unknown_block_is_skipped_and_reported():
+    builder = cube_setup()
+    region = _region(
+        [AIR, BlockState("test:cube"), BlockState("minecraft:bloque_del_futuro")],
+        [1, 2],
+        (2, 1, 1),
+    )
+    mesh = builder.build(_doc([region], (2, 1, 1)))
+
+    assert mesh.quad_count == 6
+    assert mesh.missing_blocks == ("minecraft:bloque_del_futuro",)
+    assert mesh.missing_count == 1
+    assert all(block.name != "minecraft:bloque_del_futuro" for block in mesh.palette)
+
+
+def test_block_with_missing_model_is_skipped_and_reported():
+    builder = make_setup(
+        {
+            blockstate_path("test:roto"): {"variants": {"": {"model": "test:block/no_existe"}}},
+        }
+    )
+    region = _region([AIR, BlockState("test:roto")], [1], (1, 1, 1))
+    mesh = builder.build(_doc([region], (1, 1, 1)))
+
+    assert mesh.quad_count == 0
+    assert mesh.missing_blocks == ("test:roto",)
+    assert mesh.missing_count == 1
+
+
 def test_cushion_entity_geometry_and_texture():
     """La entidad se dibuja como una caja de 1x0.25x1 con las UV de ``CushionModel``."""
     builder = cushion_setup("red")

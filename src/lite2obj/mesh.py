@@ -36,6 +36,7 @@ from .litematic import BlockState, Litematic
 from .models import (
     BLOCK_CENTER,
     FACE_DIRECTIONS,
+    BlockModelError,
     Element,
     ModelResolver,
     Variant,
@@ -580,6 +581,10 @@ class Mesh:
     size: tuple[int, int, int]
     origin: tuple[int, int, int] = (0, 0, 0)
     partial: bool = False
+    #: Bloques del esquemático que no existen en los assets, ordenados por frecuencia.
+    missing_blocks: tuple[str, ...] = ()
+    #: Número de posiciones que se omitieron por no tener blockstate/modelo.
+    missing_count: int = 0
 
     @property
     def quad_count(self) -> int:
@@ -608,6 +613,8 @@ class Mesh:
             "atlas": self.atlas.size,
             "size": self.size,
             "partial": self.partial,
+            "missing_blocks": list(self.missing_blocks),
+            "missing_count": self.missing_count,
             "top_blocks": sorted(counts.items(), key=lambda kv: -kv[1])[:10],
         }
 
@@ -1164,20 +1171,28 @@ class MeshBuilder:
         placed: dict[tuple[int, int, int], StateMesh] = {}
         block_index: dict[str, int] = {}
         block_palette: list[BlockState] = []
+        missing: dict[str, int] = {}
         for position, block in voxels.items():
+            fluid = self._fluid(block)
+            try:
+                if fluid is None:
+                    placed_state = self.state_mesh(block, position)
+                elif self.resolver.fallbacks.is_fluid(block.path) is not None:
+                    # Bloque de fluido puro: sólo agua/lava, sin geometría de bloque.
+                    placed_state = self._fluid_state_mesh(block, fluid, position, voxels)
+                else:
+                    # Losa, escalera, valla... con ``waterlogged=true``: bloque + fluido.
+                    placed_state = self._waterlogged_state_mesh(block, fluid, position, voxels)
+            except BlockModelError:
+                # Un bloque de una versión más nueva que los assets no debe tumbar el
+                # render: se omite y se avisa al usuario de que actualice el .l2oassets.
+                missing[block.name] = missing.get(block.name, 0) + 1
+                continue
+            placed[position] = placed_state
             key = self.state_key(block)
             if key not in block_index:
                 block_index[key] = len(block_palette)
                 block_palette.append(block)
-            fluid = self._fluid(block)
-            if fluid is None:
-                placed[position] = self.state_mesh(block, position)
-            elif self.resolver.fallbacks.is_fluid(block.path) is not None:
-                # Bloque de fluido puro: sólo agua/lava, sin geometría de bloque.
-                placed[position] = self._fluid_state_mesh(block, fluid, position, voxels)
-            else:
-                # Losa, escalera, valla... con ``waterlogged=true``: bloque + fluido.
-                placed[position] = self._waterlogged_state_mesh(block, fluid, position, voxels)
 
         # Las entidades no ocupan la rejilla de bloques. Los *block entities* (cofres,
         # estandartes, cajas de shulker...) sustituyen al modelo de su bloque; el resto se
@@ -1442,6 +1457,10 @@ class MeshBuilder:
             size=doc.enclosing_size,
             origin=origin,
             partial=partial,
+            missing_blocks=tuple(
+                name for name, _ in sorted(missing.items(), key=lambda kv: (-kv[1], kv[0]))
+            ),
+            missing_count=sum(missing.values()),
         )
 
 

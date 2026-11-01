@@ -110,6 +110,16 @@ def test_asset_status_reports_version(tmp_path):
     assert "Minecraft 26.3" in detail
     assert color == "#58c27d"
 
+    status, detail, color = _asset_status(
+        pack, ("minecraft:bloque_del_futuro", "minecraft:otro"), 42
+    )
+    assert "⚠" in status
+    assert "no están en los assets" in status
+    assert "Actualiza el .l2oassets" in detail
+    assert "42 bloque(s)" in detail
+    assert "minecraft:bloque_del_futuro" in detail
+    assert color == "#e8b45a"
+
 
 def test_resource_packs_in_directory(tmp_path):
     from lite2obj.gui.app import _resource_packs_in

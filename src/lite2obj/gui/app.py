@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import traceback
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -92,11 +93,16 @@ def _resource_packs_in(path: Path) -> list[Path]:
     )
 
 
-def _asset_status(pack: Path | None) -> tuple[str, str, str]:
+def _asset_status(
+    pack: Path | None,
+    missing: Sequence[str] = (),
+    missing_count: int = 0,
+) -> tuple[str, str, str]:
     """Estado, detalle y color del archivo de assets base de Minecraft.
 
     Devuelve ``(texto de estado, detalle, color)``. El detalle incluye la versión de
-    Minecraft con la que se generó el archivo.
+    Minecraft con la que se generó el archivo. Si el último render encontró bloques que no
+    están en los assets (``missing``), el check pasa a ser un aviso de actualización.
     """
     if pack is None:
         return (
@@ -112,11 +118,19 @@ def _asset_status(pack: Path | None) -> tuple[str, str, str]:
         )
     manifest = assetpack.read_manifest(pack) or {}
     version = manifest.get("minecraft_version") or "desconocida"
-    return (
-        "✓  Assets base de Minecraft configurados",
-        f"Generados desde Minecraft {version} · {pack.name}",
-        "#58c27d",
-    )
+    detail = f"Generados desde Minecraft {version} · {pack.name}"
+    if missing:
+        shown = ", ".join(missing[:5])
+        if len(missing) > 5:
+            shown += f" y {len(missing) - 5} más"
+        count = missing_count or len(missing)
+        return (
+            "⚠  Hay bloques que no están en los assets",
+            f"{detail}\n{count:,} bloque(s) omitidos: {shown}. "
+            "Actualiza el .l2oassets con un client jar más reciente.",
+            "#e8b45a",
+        )
+    return ("✓  Assets base de Minecraft configurados", detail, "#58c27d")
 
 
 def _demo_schematic_path() -> Path:
@@ -629,7 +643,9 @@ class MainWindow(QMainWindow):
 
     def _update_assets_label(self) -> None:
         pack = paths.asset_pack()
-        status, detail, color = _asset_status(pack)
+        missing = self.mesh.missing_blocks if self.mesh is not None else ()
+        count = self.mesh.missing_count if self.mesh is not None else 0
+        status, detail, color = _asset_status(pack, missing, count)
         self.assets_status.setText(status)
         self.assets_status.setStyleSheet(f"color: {color}; font-weight: 600;")
         self.assets_label.setText(detail)
@@ -843,6 +859,7 @@ class MainWindow(QMainWindow):
         self.mesh = None
         self._mesh_key = None
         self._dirty = True
+        self._update_assets_label()
         self.settings.setValue("last_dir", str(path.parent))
         self.setWindowTitle(f"lite2obj — {path.name}")
 
@@ -944,6 +961,7 @@ class MainWindow(QMainWindow):
         self._set_busy(False)
         self.viewport.set_mesh(mesh, fit=first)
         self._update_stats(mesh)
+        self._update_assets_label()
         current = self._render_key()
         self._dirty = current != self._mesh_key
 
@@ -974,6 +992,13 @@ class MainWindow(QMainWindow):
             f"Sprites: {stats['sprites']} · atlas {width}×{height}\n"
             f"Tiempo: {elapsed:.2f} s"
         )
+        if mesh.missing_blocks:
+            names = ", ".join(mesh.missing_blocks[:5])
+            if len(mesh.missing_blocks) > 5:
+                names += f" y {len(mesh.missing_blocks) - 5} más"
+            self.stats_label.setText(
+                self.stats_label.text() + f"\n⚠ Omitidos: {mesh.missing_count:,} bloques ({names})"
+            )
 
     def _invalidate(self, *_args) -> None:
         if self.path is None:

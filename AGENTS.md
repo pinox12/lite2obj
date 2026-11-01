@@ -63,6 +63,11 @@ Pipeline order, each layer assuming the previous:
   must stay the one requested so `used_alias` and culling with legacy names are correct.
   The variant seed still comes from the normalized state.
 - `mesh.py` is the delicate part:
+  - A block whose blockstate or model is absent from the `.l2oassets` (typically a newer
+    Minecraft version) is **skipped** instead of aborting the render: `MeshBuilder.build()`
+    catches `BlockModelError`, records the name in `Mesh.missing_blocks`/`missing_count` and
+    keeps the rest of the schematic. The GUI turns the assets ✓ into a ⚠ that lists the
+    omitted blocks and asks to regenerate the pack from a newer client jar.
   - A `cullface` face is emitted unless the neighbour is a full opaque cube. `covers` is
     computed per element; `_is_full_cube` accepts 90°-multiple rotations but rejects
     element `rotation`. Terrain blocks depend on this to cull at all.
@@ -152,8 +157,9 @@ Pipeline order, each layer assuming the previous:
   file dialog or drag-and-drop, resource packs are added explicitly with the file/folder
   dialog (multi-select for `.zip`, a folder can expand to all packs inside it; persisted in
   `QSettings`, no disk scan) and assets come from the `.l2oassets`. `_asset_status()`
-  drives the ✓/✗ panel and the manifest's `minecraft_version`; `_ensure_assets()` shows the
-  instructions alert and offers to generate the pack from a client jar chosen by the user.
+  drives the ✓/✗/⚠ panel and the manifest's `minecraft_version`; the ⚠ appears when the
+  last mesh has `missing_blocks`. `_ensure_assets()` shows the instructions alert and offers
+  to generate the pack from a client jar chosen by the user.
 - Use **Qt's own OpenGL classes** (`QOpenGLShaderProgram`, `QOpenGLBuffer`,
   `QOpenGLVertexArrayObject`, `QOpenGLTexture`, `QOpenGLFunctions`). Do not create an
   external GL context (moderngl/glcontext): it makes its own framebuffer and drawing is
