@@ -31,6 +31,14 @@ def test_windows_open_command_quotes_executable():
     assert command == '"C:\\Program Files\\lite2obj\\lite2obj.exe" "%1"'
 
 
+def test_command_uses_appimage_path(tmp_path, monkeypatch):
+    appimage = tmp_path / "lite2obj.AppImage"
+    appimage.write_bytes(b"")
+    monkeypatch.setenv("APPIMAGE", str(appimage))
+
+    assert associations.command() == [str(appimage.resolve())]
+
+
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="sólo Linux")
 def test_linux_install_and_uninstall(tmp_path, monkeypatch):
     monkeypatch.setattr(associations, "_data_home", lambda: tmp_path)
