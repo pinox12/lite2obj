@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QSettings, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QKeySequence, QPalette, QSurfaceFormat
+from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPalette, QSurfaceFormat
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -47,7 +47,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import assetpack, assets, litematic, paths
+from .. import assetpack, assets, associations, litematic, paths
 from ..assets import ResourceManager
 from ..export import ExportOptions, ExportResult, export_obj
 from ..mesh import Mesh, MeshBuilder
@@ -63,6 +63,24 @@ _ASSET_PACK_FILTER = "Assets de lite2obj (*.l2oassets);;Todos los archivos (*)"
 _JAR_FILTER = "Minecraft client (*.jar);;Todos los archivos (*)"
 _PACK_FILTER = "Resource pack (*.zip);;Todos los archivos (*)"
 _DEMO_SCHEMATIC_NAME = "all_blocks_and_entities.litematic"
+
+
+def _app_icon_path() -> Path | None:
+    """PNG del icono, dentro del bundle o en el repositorio durante el desarrollo."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    candidates: list[Path] = []
+    if bundle:
+        candidates.append(Path(bundle) / "lite2obj.png")
+    candidates.append(Path(__file__).resolve().parents[3] / "packaging" / "lite2obj.png")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _app_icon() -> QIcon:
+    path = _app_icon_path()
+    return QIcon(str(path)) if path is not None else QIcon()
 
 
 def _is_resource_pack(path: Path) -> bool:
@@ -543,6 +561,18 @@ class MainWindow(QMainWindow):
         )
         self.assets_action.triggered.connect(lambda: self._generate_asset_pack())
 
+        self.associate_action = QAction("Asociar archivos .litematic…", self)
+        self.associate_action.setToolTip(
+            "Haz que los .litematic se abran con lite2obj al hacer doble clic"
+        )
+        self.associate_action.triggered.connect(lambda: self._install_association())
+        self.unassociate_action = QAction("Quitar asociación de .litematic", self)
+        self.unassociate_action.setToolTip("Deshace la asociación creada desde lite2obj")
+        self.unassociate_action.triggered.connect(lambda: self._remove_association())
+        if not associations.supported():
+            self.associate_action.setEnabled(False)
+            self.unassociate_action.setEnabled(False)
+
         self.demo_action = QAction("Renderizar litemática de prueba", self)
         self.demo_action.setToolTip("Abre y renderiza all_blocks_and_entities.litematic")
         self.demo_action.triggered.connect(lambda: self._render_demo())
@@ -562,6 +592,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.screenshot_action)
         file_menu.addSeparator()
         file_menu.addAction(self.assets_action)
+        file_menu.addSeparator()
+        file_menu.addAction(self.associate_action)
+        file_menu.addAction(self.unassociate_action)
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
@@ -1225,6 +1258,52 @@ class MainWindow(QMainWindow):
         self.droped_items_check.setChecked(True)
         self.open_path(path)
 
+    def _install_association(self) -> None:
+        if not associations.supported():
+            QMessageBox.information(
+                self,
+                "Asociación de archivos",
+                "La asociación automática sólo está disponible en Linux y Windows.",
+            )
+            return
+        state = "activa" if associations.is_associated() else "inactiva"
+        answer = QMessageBox.question(
+            self,
+            "Asociar archivos .litematic",
+            "Los archivos .litematic se abrirán con lite2obj al hacer doble clic.\n\n"
+            f"Programa: {associations.command_description()}\n"
+            f"Asociación instalada: {state}\n\n"
+            "La asociación se guarda sólo para tu usuario. ¿Continuar?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            detail = associations.install(icon=_app_icon_path())
+        except associations.AssociationError as exc:
+            self._show_error("No se pudo asociar el archivo .litematic.", str(exc))
+            return
+        QMessageBox.information(self, "Asociación creada", detail)
+        self.status_label.setText("Archivos .litematic asociados a lite2obj")
+
+    def _remove_association(self) -> None:
+        if not associations.supported():
+            return
+        answer = QMessageBox.question(
+            self,
+            "Quitar asociación de .litematic",
+            "Los archivos .litematic dejarán de abrirse con lite2obj al hacer doble clic.\n\n"
+            "¿Continuar?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            detail = associations.uninstall()
+        except associations.AssociationError as exc:
+            self._show_error("No se pudo quitar la asociación.", str(exc))
+            return
+        QMessageBox.information(self, "Asociación eliminada", detail)
+        self.status_label.setText("Asociación de .litematic eliminada")
+
     def _about(self) -> None:
         QMessageBox.about(
             self,
@@ -1350,7 +1429,12 @@ def run(path: str | Path | None = None) -> None:
         "QLabel#warning { color: #e8b45a; font-size: 11px; }"
         "QPushButton { padding: 5px 9px; }"
     )
+    icon = _app_icon()
+    if not icon.isNull():
+        app.setWindowIcon(icon)
     window = MainWindow(Path(path) if path else None)
+    if not icon.isNull():
+        window.setWindowIcon(icon)
     window.show()
     app.exec()
 

@@ -160,6 +160,16 @@ Pipeline order, each layer assuming the previous:
   drives the ✓/✗/⚠ panel and the manifest's `minecraft_version`; the ⚠ appears when the
   last mesh has `missing_blocks`. `_ensure_assets()` shows the instructions alert and offers
   to generate the pack from a client jar chosen by the user.
+- File association lives in `associations.py` and is only written when the user chooses
+  **Archivo → Asociar archivos .litematic…**. Linux writes `lite2obj.desktop`, a MIME XML
+  (`application/x-litematic`) and the `mimeapps.list` default under the user's data/config
+  dirs; Windows writes `HKCU\Software\Classes` (no admin). The command is the `APPIMAGE` path
+  when running from an AppImage, so moving the file requires re-associating. Keep
+  `gui/__main__.py` so the development fallback `python -m lite2obj.gui` works.
+- `packaging/appimage/lite2obj.desktop` must keep `Exec=lite2obj %f` and
+  `MimeType=application/x-litematic;`, and `build_appimage.sh` must copy
+  `packaging/appimage/lite2obj-mime.xml` into `usr/share/mime/packages/`. An AppImage does
+  not register itself: the app action installs the association in the user profile.
 - Use **Qt's own OpenGL classes** (`QOpenGLShaderProgram`, `QOpenGLBuffer`,
   `QOpenGLVertexArrayObject`, `QOpenGLTexture`, `QOpenGLFunctions`). Do not create an
   external GL context (moderngl/glcontext): it makes its own framebuffer and drawing is

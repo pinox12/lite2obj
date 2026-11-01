@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 292 tests |
+| F8 | Tests | ✅ 298 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -308,6 +308,8 @@ La ventana reúne todo el flujo, al estilo de j-mc-2-obj:
 - **Exportar a Blender**: carpeta, nombre, agrupación, escala y `Z arriba` (nativo de Blender).
 - **Archivo → Generar archivo de assets…**: pide el client jar, extrae los assets a un
   `.l2oassets` y lo usa en el siguiente render.
+- **Archivo → Asociar archivos .litematic…**: hace que el doble clic abra el esquemático en
+  lite2obj. La asociación es por usuario y se puede quitar desde el mismo menú.
 - **Ayuda → Renderizar litemática de prueba**: abre `all_blocks_and_entities.litematic`, el
   esquemático de referencia con todos los bloques, combinaciones y entidades.
 
@@ -318,6 +320,23 @@ captura, `F` reencuadrar, `G` rejilla, `W` wireframe.
 
 En Linux con NVIDIA bajo Wayland la app usa `QT_QPA_PLATFORM=xcb` (XWayland) automáticamente
 porque la creación del contexto EGL falla; se puede desactivar definiendo esa variable antes.
+
+### Abrir `.litematic` con doble clic
+
+Desde la app: **Archivo → Asociar archivos .litematic…**. La asociación se guarda sólo para
+el usuario actual y no requiere permisos de administrador.
+
+- **Linux**: crea `~/.local/share/applications/lite2obj.desktop` y
+  `~/.local/share/mime/packages/lite2obj.xml`, actualiza las cachés y fija el MIME
+  `application/x-litematic`. Si mueves la AppImage, vuelve a ejecutar la acción para que el
+  lanzador apunte a la ruta nueva. **Quitar asociación** borra esos archivos y la entrada de
+  `mimeapps.list`.
+- **Windows**: escribe las claves de `HKCU\Software\Classes` para `.litematic`, así que no
+  hace falta instalar nada. Windows puede pedir confirmación la primera vez que abras un
+  archivo; elige lite2obj y marca «Usar siempre».
+
+La AppImage incluye el `.desktop` y el XML de MIME en `usr/share`, pero una AppImage no se
+integra sola: la acción de la app instala la asociación en el perfil del usuario.
 
 ### CLI sin interfaz
 
@@ -351,6 +370,7 @@ src/lite2obj/
   litematic.py   parser .litematic -> regiones, paleta, voxels
   paths.py       localización del archivo de assets (sin escanear el disco)
   assetpack.py   generación/lectura del archivo .l2oassets
+  associations.py asociación de .litematic (Linux .desktop/MIME, Windows Registro)
   assets.py      pila de recursos (archivo de assets + resource packs explícitos)
   models.py      blockstates y modelos (variants/multipart, rotaciones)
   fallbacks.py   geometría sustituta (fluidos, bloques de entidad)
@@ -372,6 +392,7 @@ tests/
   test_mesh.py                orientación de caras/UV, culling, entidades, malla real
   test_export.py              OBJ/MTL, winding, deduplicado, agrupación
   test_gui.py                 cámara, buffers del viewport y arranque offscreen
+  test_associations.py        asociación de .litematic (Linux/Windows)
   test_cli.py                 comandos de la CLI
   test_schematics_integration.py  valida el esquemático de referencia
   test_coverage_integration.py    cobertura de geometría sobre el esquemático de referencia

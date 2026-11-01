@@ -22,6 +22,7 @@ ICON = ROOT / "packaging" / ("lite2obj.ico" if sys.platform == "win32" else "lit
 # deja en la raíz del bundle para que ``_demo_schematic_path`` lo encuentre.
 datas = collect_data_files("lite2obj")
 datas.append((str(ROOT / "all_blocks_and_entities.litematic"), "."))
+datas.append((str(ROOT / "packaging" / "lite2obj.png"), "."))
 
 # El archivo de assets se incluye en el bundle para que la app funcione sin Minecraft
 # instalado. Los scripts de empaquetado lo preparan en ``build/assets`` con

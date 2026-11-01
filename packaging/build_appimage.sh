@@ -36,6 +36,7 @@ echo "==> Preparando AppDir"
 rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib/lite2obj"
 mkdir -p "$APPDIR/usr/share/applications"
+mkdir -p "$APPDIR/usr/share/mime/packages"
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
 # El directorio onedir de PyInstaller se copia tal cual a usr/lib; el lanzador
@@ -48,6 +49,8 @@ install -Dm644 "$ROOT/packaging/appimage/lite2obj.desktop" \
     "$APPDIR/lite2obj.desktop"
 install -Dm644 "$ROOT/packaging/appimage/lite2obj.desktop" \
     "$APPDIR/usr/share/applications/lite2obj.desktop"
+install -Dm644 "$ROOT/packaging/appimage/lite2obj-mime.xml" \
+    "$APPDIR/usr/share/mime/packages/lite2obj.xml"
 install -Dm644 "$ROOT/packaging/lite2obj.png" "$APPDIR/lite2obj.png"
 install -Dm644 "$ROOT/packaging/lite2obj.png" \
     "$APPDIR/usr/share/icons/hicolor/256x256/apps/lite2obj.png"
