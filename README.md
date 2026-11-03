@@ -16,7 +16,7 @@ un objeto importable en **Blender** (OBJ + MTL + texturas). Inspirado en
 | F5 | Export OBJ + MTL + atlas | ✅ hecho |
 | F6 | CLI (`info`, `list`, `export`) | ✅ hecho |
 | F7 | App de escritorio (PySide6 + OpenGL) | ✅ hecho |
-| F8 | Tests | ✅ 299 tests |
+| F8 | Tests | ✅ 302 tests |
 
 El plan completo está en [`PLAN.md`](PLAN.md).
 
@@ -108,6 +108,25 @@ Desde PowerShell en Windows:
 Genera `dist\lite2obj.exe`, un único archivo que se puede copiar a cualquier carpeta y
 ejecutar sin instalador. No requiere Python instalado.
 
+### Builds sin texturas
+
+Las releases de GitHub se publican **sin** `lite2obj-assets.l2oassets` ni texturas de
+Minecraft. Para reproducir esa build en local:
+
+```bash
+LITE2OBJ_SKIP_ASSETS=1 ./packaging/build_appimage.sh
+```
+
+```powershell
+$env:LITE2OBJ_SKIP_ASSETS = "1"
+.\packaging\build_windows.ps1
+```
+
+La variable hace que `prepare_assets.py` no prepare nada y que `lite2obj.spec` no incluya
+ningún pack, aunque exista uno en `build/assets`. La app arranca igual y pide el client jar
+desde **Archivo → Generar archivo de assets…**. `prepare_assets.py --optional` es una
+alternativa: permite empaquetar sin pack, pero lo incluye si está disponible.
+
 ### Notas
 
 - Los scripts de empaquetado ejecutan `packaging/prepare_assets.py`, que deja
@@ -120,9 +139,12 @@ ejecutar sin instalador. No requiere Python instalado.
   resultante redistribuye assets de Minecraft; revisa las condiciones de Mojang antes de
   publicarlo.
 - Si no hay archivo de assets ni client jar indicado, el empaquetado se detiene con un
-  mensaje que indica cómo generarlo. Tras actualizar Minecraft, regenera el archivo con
+  mensaje que indica cómo generarlo, salvo que se use `--skip`, `--optional` o
+  `LITE2OBJ_SKIP_ASSETS=1`. Tras actualizar Minecraft, regenera el archivo con
   `uv run python packaging/prepare_assets.py --force --jar <ruta-al-client.jar>` antes de
   empaquetar.
+- Las builds de CI/CD usan `LITE2OBJ_SKIP_ASSETS=1`; los workflows comprueban que el
+  resultado no contenga ningún `.l2oassets`.
 - La vista 3D necesita OpenGL 3.3; el equipo de destino debe tener drivers gráficos.
 - El icono se regenera con `uv run python packaging/make_icon.py`.
 - Los artefactos (`dist/`, `build/`) están en `.gitignore`.
@@ -353,6 +375,30 @@ uv run ruff format .   # formato
 uv run mypy src        # tipos
 ```
 
+## CI/CD y web
+
+El repositorio incluye tres workflows de GitHub Actions:
+
+| Workflow | Cuándo | Qué hace |
+|---|---|---|
+| `.github/workflows/ci.yml` | push a `main`/`master` y pull requests | `ruff format --check`, `ruff check`, `mypy` y `pytest` en Linux y Windows. En push también compila AppImage y `.exe` **sin** `.l2oassets` y comprueba que no se haya colado el pack. |
+| `.github/workflows/release.yml` | tags `v*` o lanzamiento manual con un tag | Verifica que el tag coincida con `__version__`, compila la AppImage y el `.exe` sin texturas y publica ambos más `SHA256SUMS` en GitHub Releases. |
+| `.github/workflows/pages.yml` | cambios en `docs/` | Publica la landing en GitHub Pages. |
+
+La landing está en [`docs/`](docs/): es HTML, CSS y un poco de JavaScript, sin build ni
+dependencias externas. Antes de publicarla, cambia `data-repo="TU-USUARIO/lite2obj"` en
+`docs/index.html` y elige **GitHub Actions** como origen en **Settings → Pages**.
+
+Para publicar una versión:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+El tag debe coincidir con `__version__` de `src/lite2obj/__init__.py`. Las builds de la
+release no llevan texturas: el usuario genera su `.l2oassets` al abrir la app.
+
 ## Ubicación de los assets
 
 `lite2obj` sólo usa el archivo `.l2oassets`; no detecta instalaciones de Minecraft,
@@ -393,9 +439,13 @@ tests/
   test_export.py              OBJ/MTL, winding, deduplicado, agrupación
   test_gui.py                 cámara, buffers del viewport y arranque offscreen
   test_associations.py        asociación de .litematic (Linux/Windows)
+  test_packaging.py           builds con y sin archivo de assets
   test_cli.py                 comandos de la CLI
   test_schematics_integration.py  valida el esquemático de referencia
   test_coverage_integration.py    cobertura de geometría sobre el esquemático de referencia
+docs/                         landing estática para GitHub Pages
+packaging/                    PyInstaller, AppImage, .exe y preparación de assets
+.github/workflows/            CI, release y Pages
 ```
 
 Los triángulos se ordenan por modo de transparencia (opaco, *cutout*, translúcido) dentro de

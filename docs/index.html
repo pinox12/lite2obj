@@ -1,0 +1,513 @@
+<!doctype html>
+<!--
+  Landing de lite2obj para GitHub Pages.
+
+  Antes de publicar, sustituye TU-USUARIO por el usuario u organización real en
+  el atributo data-repo de <body>. Todos los enlaces a GitHub y a Releases se
+  generan a partir de ese valor.
+-->
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lite2obj — De Litematica a Blender</title>
+    <meta
+      name="description"
+      content="Renderiza esquemáticos .litematic de Minecraft en 3D y expórtalos a Blender como OBJ + MTL + atlas. AppImage para Linux y .exe portable para Windows."
+    />
+    <meta name="theme-color" content="#0b0e12" />
+    <link rel="icon" href="assets/icon.png" />
+    <link rel="apple-touch-icon" href="assets/icon.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="lite2obj — De Litematica a Blender" />
+    <meta
+      property="og:description"
+      content="Renderiza esquemáticos .litematic en 3D y expórtalos a Blender. Linux y Windows, sin instalar Minecraft."
+    />
+    <meta property="og:image" content="assets/preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body data-repo="TU-USUARIO/lite2obj">
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+    <header class="site-header" id="top">
+      <div class="wrap nav">
+        <a class="brand" href="#inicio" aria-label="lite2obj, inicio">
+          <img src="assets/icon.png" alt="" width="34" height="34" />
+          <span>lite2obj</span>
+        </a>
+
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-label="Abrir menú"
+          aria-controls="menu"
+          aria-expanded="false"
+        >
+          <span></span>
+        </button>
+
+        <nav class="nav-links" id="menu" aria-label="Navegación principal">
+          <a href="#caracteristicas">Características</a>
+          <a href="#como-funciona">Cómo funciona</a>
+          <a href="#assets">Assets</a>
+          <a href="#descargas">Descargas</a>
+          <a href="#faq">FAQ</a>
+          <a
+            class="button button-small"
+            href="https://github.com/TU-USUARIO/lite2obj"
+            data-github
+            target="_blank"
+            rel="noopener"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="contenido">
+      <section class="hero" id="inicio">
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="dot"></span> Minecraft Litematica → Blender</p>
+            <h1>De tu <em>litemática</em> a Blender, sin pelearte con texturas.</h1>
+            <p class="lead">
+              lite2obj lee un esquemático <code>.litematic</code>, reconstruye la malla con los
+              modelos y texturas de Minecraft y la exporta como <strong>OBJ + MTL + atlas</strong>
+              lista para importar en Blender. Visor 3D propio, CLI y builds portables para Linux y
+              Windows.
+            </p>
+            <div class="actions">
+              <a class="button" href="#descargas">Descargar lite2obj</a>
+              <a
+                class="button button-ghost"
+                href="https://github.com/TU-USUARIO/lite2obj"
+                data-github
+                target="_blank"
+                rel="noopener"
+                >Ver el código <span aria-hidden="true">↗</span></a
+              >
+            </div>
+            <ul class="badges" aria-label="Puntos destacados">
+              <li>AppImage + .exe</li>
+              <li>OBJ + MTL + atlas</li>
+              <li>OpenGL nativo</li>
+              <li>Sin escanear el disco</li>
+            </ul>
+          </div>
+
+          <div class="hero-visual">
+            <div class="app-window" aria-label="Vista previa de la interfaz de lite2obj">
+              <div class="window-bar">
+                <i></i><i></i><i></i>
+                <span class="window-title">lite2obj — all_blocks_and_entities.litematic</span>
+              </div>
+              <div class="app-body">
+                <aside class="mock-sidebar" aria-hidden="true">
+                  <div>
+                    <span class="mock-label">Assets de Minecraft</span>
+                    <div class="asset-ok">
+                      <span class="check">✓</span>
+                      <div>
+                        <strong>Assets listos</strong>
+                        <small>Minecraft 26.3</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <span class="mock-label">Resource packs</span>
+                    <div class="pack-row">
+                      <span class="checkbox checked"></span> Mizunos 16 Craft
+                    </div>
+                    <div class="pack-row">
+                      <span class="checkbox checked"></span> Fresh Animations
+                    </div>
+                    <div class="pack-row">
+                      <span class="checkbox"></span> Vanilla Tweaks
+                    </div>
+                  </div>
+                  <div>
+                    <span class="mock-label">Vista</span>
+                    <div class="mock-toggle">Caras ocultas <span class="switch"></span></div>
+                    <div class="mock-toggle">Entidades <span class="switch"></span></div>
+                    <div class="mock-toggle">Rejilla <span class="switch"></span></div>
+                  </div>
+                </aside>
+                <div class="mock-viewport">
+                  <img
+                    src="assets/preview.svg"
+                    alt="Isla isométrica de bloques de Minecraft con césped, agua, arena y un árbol"
+                    width="520"
+                    height="380"
+                  />
+                  <span class="viewport-badge">Vista 3D · OpenGL</span>
+                </div>
+              </div>
+            </div>
+            <div class="float-card float-card-a"><strong>OBJ + MTL</strong> + atlas.png</div>
+            <div class="float-card float-card-b">Caras ocultas descartadas</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="caracteristicas">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker">Qué hace</p>
+            <h2>Fiel a Minecraft, cómodo en Blender.</h2>
+            <p>
+              No es un conversor de cajas: respeta blockstates, variantes, rotaciones, UVs,
+              transparencia, tintes de bioma y las reglas de culling del juego.
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
+                  <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
+                </svg>
+              </span>
+              <h3>Malla fiel al juego</h3>
+              <p>
+                Blockstates, multipart, herencia de modelos, rotaciones de variant y de elemento,
+                UVs explícitas y <code>uvlock</code> como vanilla.
+              </p>
+            </article>
+
+            <article class="feature">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.8 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3Z" />
+                  <circle cx="7.5" cy="11.5" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="10" cy="7.5" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="14.5" cy="7" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="17" cy="10.5" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              </span>
+              <h3>Atlas y tintes</h3>
+              <p>
+                Empaqueta todas las texturas en un atlas con padding y modos de transparencia.
+                Césped, hojas y agua con su color de bioma.
+              </p>
+            </article>
+
+            <article class="feature">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
+                  <path d="m4 7.5 8 4.5 8-4.5" />
+                  <path d="m8 9.75 8 4.5" opacity=".5" />
+                </svg>
+              </span>
+              <h3>Culling de verdad</h3>
+              <p>
+                Descarta caras contra cubos opacos, cristal del mismo tipo, vidrieras y vallas.
+                Los fluidos comparten altura de esquina y forman rampas continuas.
+              </p>
+            </article>
+
+            <article class="feature">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7Z" />
+                  <path d="M4 8.5 12 13l8-4.5M12 13v7" />
+                  <path d="M8 6.25v7M16 6.25v7" opacity=".45" />
+                </svg>
+              </span>
+              <h3>Entidades y block entities</h3>
+              <p>
+                Cofres, estandartes, calaveras, marcos, barcos, vagonetas y criaturas opcionales,
+                con las matrices y poses de vanilla.
+              </p>
+            </article>
+
+            <article class="feature">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <path d="M6 3h8l4 4v14H6V3Z" />
+                  <path d="M14 3v4h4M9 12h6M9 16h6" />
+                </svg>
+              </span>
+              <h3>Listo para Blender</h3>
+              <p>
+                OBJ con caras cuadriláteras, MTL con un material <code>atlas</code> y el PNG del
+                atlas. Sin pasos intermedios ni plugins.
+              </p>
+            </article>
+
+            <article class="feature">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="m7 9 3 3-3 3M13 15h4" />
+                </svg>
+              </span>
+              <h3>App y CLI</h3>
+              <p>
+                Visor 3D con órbita, rejilla, wireframe y corte por capas, o comandos
+                <code>info</code>, <code>list</code> y <code>export</code> para automatizar.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-soft" id="como-funciona">
+        <div class="wrap">
+          <div class="section-head center">
+            <p class="kicker">Cómo funciona</p>
+            <h2>Tres pasos y ya estás en Blender.</h2>
+            <p>
+              La app no busca instalaciones de Minecraft ni esquemáticos por el disco. Tú eliges
+              los archivos; ella hace el resto.
+            </p>
+          </div>
+
+          <div class="steps">
+            <article class="step">
+              <h3>Abre tu .litematic</h3>
+              <p>
+                Arrástralo sobre la ventana o usa <strong>Abrir esquemático…</strong>. Verás la
+                malla en el visor 3D antes de exportar.
+              </p>
+            </article>
+            <article class="step">
+              <h3>Genera el pack de assets</h3>
+              <p>
+                Elige tu <code>client.jar</code> una vez. lite2obj extrae blockstates, modelos y
+                texturas a un <code>.l2oassets</code> local.
+              </p>
+            </article>
+            <article class="step">
+              <h3>Exporta a OBJ</h3>
+              <p>
+                Elige carpeta y nombre. Importa el <code>.obj</code> en Blender con el
+                <code>.mtl</code> y el <code>atlas.png</code> al lado.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="assets">
+        <div class="wrap assets-grid">
+          <div class="assets-copy">
+            <p class="kicker">Assets sin líos</p>
+            <h2>Las texturas no viajan en la build.</h2>
+            <p>
+              Las builds de GitHub Releases se publican <strong>sin</strong>
+              <code>lite2obj-assets.l2oassets</code> ni texturas de Minecraft: el contenido tiene
+              derechos de autor y cada usuario genera su propio archivo desde el jar de su
+              versión.
+            </p>
+            <p>
+              Es un paso único. Después, lite2obj usa ese pack en todos los renders, sin volver a
+              pedir el jar ni escanear el disco.
+            </p>
+
+            <ul class="check-list">
+              <li>Sin autodetección de Minecraft, versiones ni resource packs.</li>
+              <li>Resource packs opcionales, añadidos a mano como .zip o carpeta.</li>
+              <li>Aviso ⚠ si el esquemático trae bloques que no están en el pack.</li>
+            </ul>
+
+            <div class="callout">
+              <span class="callout-icon" aria-hidden="true">⚠</span>
+              <div>
+                <strong>¿Bloques omitidos?</strong> El pack es anterior a tu esquemático. Regenera
+                los assets con un <code>client.jar</code> más reciente desde
+                <strong>Archivo → Generar archivo de assets…</strong>.
+              </div>
+            </div>
+          </div>
+
+          <div class="terminal" aria-label="Comandos para generar el archivo de assets">
+            <div class="terminal-bar">
+              <i></i><i></i><i></i>
+              <span>terminal</span>
+            </div>
+            <pre><code><span class="comment"># Desde la app</span>
+Archivo → Generar archivo de assets…
+
+<span class="comment"># O desde la CLI</span>
+<span class="prompt">$</span> uv run lite2obj assets build --jar client.jar
+<span class="prompt">$</span> uv run lite2obj assets info
+
+<span class="comment"># Exportar el esquemático</span>
+<span class="prompt">$</span> uv run lite2obj export casa.litematic salida/ --name casa</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-soft" id="descargas">
+        <div class="wrap">
+          <div class="section-head center">
+            <p class="kicker">Descargas</p>
+            <h2>Portable, sin instalar Python.</h2>
+            <p>
+              Cada release publica una AppImage para Linux x86_64 y un <code>.exe</code> de un solo
+              archivo para Windows x86_64. No incluyen texturas: genera tu pack al abrir la app.
+            </p>
+          </div>
+
+          <div class="download-grid">
+            <article class="download">
+              <div class="download-head">
+                <span class="os-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2c-3.9 0-6.7 1.3-7.7 3.1C3.4 6.4 3 8.1 3 10c0 2.4.6 4.6 1.7 6.4C6 18.9 8.5 22 12 22s6-3.1 7.3-5.6C20.4 14.6 21 12.4 21 10c0-1.9-.4-3.6-1.3-4.9C18.7 3.3 15.9 2 12 2Zm0 2c2.4 0 4.5.7 5.5 1.8.5.6.8 1.4 1 2.4H5.5c.2-1 .5-1.8 1-2.4C7.5 4.7 9.6 4 12 4ZM5.2 10.2h13.6c0 1.9-.5 3.8-1.3 5.3-1 1.9-3 4.5-5.5 4.5s-4.5-2.6-5.5-4.5c-.8-1.5-1.3-3.4-1.3-5.3Z" />
+                    <circle cx="8.5" cy="14" r="1.2" />
+                    <circle cx="15.5" cy="14" r="1.2" />
+                  </svg>
+                </span>
+                <div>
+                  <h3>Linux</h3>
+                  <p>AppImage · x86_64 · FUSE opcional</p>
+                </div>
+              </div>
+              <p>
+                Descarga, da permisos de ejecución y abre. La asociación de
+                <code>.litematic</code> se instala desde el menú <strong>Archivo</strong>.
+              </p>
+              <a
+                class="button"
+                href="https://github.com/TU-USUARIO/lite2obj/releases/latest"
+                data-github-path="/releases/latest"
+                >Descargar AppImage <span aria-hidden="true">↓</span></a
+              >
+            </article>
+
+            <article class="download">
+              <div class="download-head">
+                <span class="os-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 5.5 10.5 4v7H3V5.5Zm8.5-1.6L21 2.5V11h-9.5V3.9ZM3 12h7.5v7L3 17.5V12Zm8.5 0H21v8.5l-9.5-1.3V12Z" />
+                  </svg>
+                </span>
+                <div>
+                  <h3>Windows</h3>
+                  <p>.exe portable · x86_64</p>
+                </div>
+              </div>
+              <p>
+                Un solo archivo, sin instalador ni permisos de administrador. Windows puede pedir
+                confirmación la primera vez que abras un esquemático.
+              </p>
+              <a
+                class="button"
+                href="https://github.com/TU-USUARIO/lite2obj/releases/latest"
+                data-github-path="/releases/latest"
+                >Descargar .exe <span aria-hidden="true">↓</span></a
+              >
+            </article>
+          </div>
+
+          <p class="download-note">
+            Las builds no incluyen <code>.l2oassets</code>. También puedes ejecutar desde el
+            código con <code>uv run lite2obj gui</code>.
+          </p>
+        </div>
+      </section>
+
+      <section class="section" id="faq">
+        <div class="wrap">
+          <div class="section-head center">
+            <p class="kicker">Preguntas frecuentes</p>
+            <h2>Lo que suele hacer falta saber.</h2>
+          </div>
+
+          <div class="faq">
+            <details>
+              <summary>¿Necesito tener Minecraft instalado?</summary>
+              <p>
+                No. Solo necesitas el <code>client.jar</code> de la versión que uses para generar
+                el archivo de assets una vez. lite2obj no busca instalaciones, lanzadores ni
+                carpetas de Minecraft en el disco.
+              </p>
+            </details>
+            <details>
+              <summary>¿Dónde se guarda el archivo .l2oassets?</summary>
+              <p>
+                En Linux, en <code>~/.local/share/lite2obj/</code>. En Windows, en
+                <code>%LOCALAPPDATA%\lite2obj\</code>. También puedes indicar una ruta concreta
+                con la variable <code>LITE2OBJ_ASSET_PACK</code>.
+              </p>
+            </details>
+            <details>
+              <summary>El panel muestra ⚠ y faltan bloques. ¿Qué hago?</summary>
+              <p>
+                Significa que el esquemático usa bloques que no están en tu pack (normalmente de
+                una versión más nueva). Regenera los assets con un <code>client.jar</code>
+                reciente desde <strong>Archivo → Generar archivo de assets…</strong>. Los bloques
+                que no se puedan resolver se omiten; el resto del esquemático se renderiza igual.
+              </p>
+            </details>
+            <details>
+              <summary>¿Puedo usar resource packs?</summary>
+              <p>
+                Sí. Añádelos a mano con <strong>Añadir .zip…</strong> (puedes seleccionar varios)
+                o <strong>Añadir carpeta…</strong>. Se activan con casillas y se ordenan por
+                prioridad. No se buscan packs por el disco.
+              </p>
+            </details>
+            <details>
+              <summary>¿Cómo abro un .litematic con doble clic?</summary>
+              <p>
+                Desde la app: <strong>Archivo → Asociar archivos .litematic…</strong>. En Linux
+                crea una entrada <code>.desktop</code> y el MIME en tu perfil; en Windows escribe
+                las claves de <code>HKCU\Software\Classes</code>. No hace falta administrador y se
+                puede deshacer desde el mismo menú.
+              </p>
+            </details>
+            <details>
+              <summary>¿Por qué la build de GitHub no trae texturas?</summary>
+              <p>
+                Porque los assets de Minecraft tienen derechos de autor. El repositorio y las
+                releases solo publican el código y los ejecutables; el archivo de assets se genera
+                en tu máquina a partir de tu propio jar.
+              </p>
+            </details>
+            <details>
+              <summary>¿Cómo compilo la app desde el código?</summary>
+              <p>
+                Instala <a href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">uv</a>,
+                ejecuta <code>uv sync</code> y luego <code>uv run lite2obj gui</code>. Para generar
+                la AppImage o el <code>.exe</code>, usa los scripts de <code>packaging/</code>.
+                Las instrucciones completas están en el README del repositorio.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-grid">
+        <a class="footer-brand" href="#inicio">
+          <img src="assets/icon.png" alt="" width="24" height="24" />
+          lite2obj
+        </a>
+        <span>Renderiza Litematica. Exporta a Blender.</span>
+        <nav class="footer-links" aria-label="Enlaces del pie">
+          <a href="https://github.com/TU-USUARIO/lite2obj" data-github>GitHub</a>
+          <a
+            href="https://github.com/TU-USUARIO/lite2obj/releases/latest"
+            data-github-path="/releases/latest"
+            >Releases</a
+          >
+          <a
+            href="https://github.com/TU-USUARIO/lite2obj/issues"
+            data-github-path="/issues"
+            >Issues</a
+          >
+          <a href="#assets">Assets</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script src="main.js" defer></script>
+  </body>
+</html>

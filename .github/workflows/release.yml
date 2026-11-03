@@ -1,0 +1,167 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag existente que se publicará (por ejemplo, v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Comprobar versión y tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Comprobar que el tag coincide con __version__
+        id: version
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/lite2obj/__init__.py)"
+          if [ -z "$version" ]; then
+            echo "No se pudo leer __version__ de src/lite2obj/__init__.py" >&2
+            exit 1
+          fi
+          if [ "$tag" != "v$version" ]; then
+            echo "El tag $tag no coincide con la versión v$version de src/lite2obj/__init__.py" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: AppImage sin texturas
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias de empaquetado
+        run: uv sync --frozen --group packaging
+
+      - name: Construir la AppImage sin assets
+        env:
+          LITE2OBJ_SKIP_ASSETS: "1"
+        run: ./packaging/build_appimage.sh
+
+      - name: Comprobar que no se coló el pack de texturas
+        run: |
+          if find dist -name '*.l2oassets' | grep -q .; then
+            echo "La build contiene un archivo .l2oassets" >&2
+            exit 1
+          fi
+
+      - name: Guardar la AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: lite2obj-linux
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  windows:
+    name: .exe sin texturas
+    runs-on: windows-latest
+    needs: verify
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias de empaquetado
+        run: uv sync --frozen --group packaging
+
+      - name: Construir el .exe sin assets
+        env:
+          LITE2OBJ_SKIP_ASSETS: "1"
+        run: ./packaging/build_windows.ps1
+
+      - name: Comprobar que no se coló el pack de texturas
+        shell: pwsh
+        run: |
+          $pack = Get-ChildItem -Path dist -Filter *.l2oassets -Recurse
+          if ($pack) {
+              throw "La build contiene un archivo .l2oassets"
+          }
+
+      - name: Guardar el .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: lite2obj-windows
+          path: dist/lite2obj.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publicar en GitHub Releases
+    runs-on: ubuntu-latest
+    needs: [verify, linux, windows]
+    steps:
+      - name: Descargar los artefactos
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generar sumas SHA-256
+        working-directory: artifacts
+        run: sha256sum * > SHA256SUMS
+
+      - name: Crear la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify.outputs.tag }}
+          name: lite2obj ${{ needs.verify.outputs.tag }}
+          generate_release_notes: true
+          append_body: true
+          body: |
+            ## Antes de usar la app
+
+            Estas builds **no incluyen** `lite2obj-assets.l2oassets` ni texturas de
+            Minecraft: el contenido tiene derechos de autor y cada usuario genera su
+            propio archivo.
+
+            1. Consigue el `client.jar` de la versión de Minecraft que uses.
+            2. Abre lite2obj y ve a **Archivo → Generar archivo de assets…**.
+            3. Elige el jar. La app crea el `.l2oassets` en tus datos de usuario y lo usa
+               en el siguiente render.
+
+            Si un esquemático trae bloques que no están en el pack, el panel de assets
+            muestra un ⚠ con los bloques omitidos y pide regenerarlo desde un jar más
+            reciente. Los resource packs se añaden a mano desde la app; no se buscan en
+            el disco.
+
+            Las builds de Linux y Windows son portables: no necesitan instalar Python ni
+            Minecraft. En Linux, haz ejecutable la AppImage (`chmod +x`) antes de abrirla.
+          files: |
+            artifacts/*.AppImage
+            artifacts/lite2obj.exe
+            artifacts/SHA256SUMS

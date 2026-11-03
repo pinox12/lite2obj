@@ -16,8 +16,9 @@ uv run lite2obj info|list|export|gui ...
 uv run lite2obj assets build --jar <client.jar>|info
 ```
 
-There is no CI or pre-commit: run ruff, mypy and pytest yourself before committing.
-Python is 3.14; dependencies live in `uv.lock` (no pip/poetry). There is no JS/Node step.
+GitHub Actions runs ruff, mypy and pytest on Linux and Windows (`.github/workflows/ci.yml`);
+there is no pre-commit. Python is 3.14; dependencies live in `uv.lock` (no pip/poetry).
+There is no JS/Node step for the app; `docs/` is plain HTML/CSS/JS.
 
 ## Conventions
 
@@ -187,6 +188,24 @@ Pipeline order, each layer assuming the previous:
   fails otherwise). Don't remove it; the user can override the variable.
 - Screenshot in tests/automation under X11: `QT_QPA_PLATFORM=xcb uv run python ...` and read
   back with `viewport.grabFramebuffer()`.
+
+## Packaging, CI and docs
+
+- Local portable builds include the `.l2oassets` prepared by
+  `packaging/prepare_assets.py`; GitHub release builds must **not** include it. The supported
+  switch is `LITE2OBJ_SKIP_ASSETS=1`: `prepare_assets.py` does nothing, the spec omits the
+  pack even if `build/assets/lite2obj-assets.l2oassets` exists, and both packaging scripts
+  print that they are building without assets. `--skip`/`--optional` are the CLI equivalents;
+  do not remove the env check from `lite2obj.spec`.
+- `.github/workflows/ci.yml` runs `ruff format --check`, `ruff check`, `mypy src` and
+  `pytest` on Ubuntu and Windows. On push it also builds both portables without assets and
+  fails if any `.l2oassets` ends up under `dist/`.
+- `.github/workflows/release.yml` runs on tags `v*` (or a manual tag), requires the tag to
+  equal `v` + `__version__`, builds the AppImage and `.exe` without assets and publishes
+  them plus `SHA256SUMS`. Do not upload the asset pack or textures.
+- `.github/workflows/pages.yml` publishes `docs/` with GitHub Pages. The landing is static
+  (no build step); `docs/index.html` has `data-repo="TU-USUARIO/lite2obj"` as the single
+  placeholder for GitHub/Releases/Issues links. Update it before enabling Pages.
 
 ## Blender validation
 

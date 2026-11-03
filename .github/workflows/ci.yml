@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias
+        run: uv sync --frozen
+
+      - name: Comprobar formato
+        run: uv run ruff format --check .
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Tipos
+        run: uv run mypy src
+
+      - name: Tests
+        run: uv run pytest
+
+  packaging:
+    name: Empaquetado sin texturas (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: test
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias de empaquetado
+        run: uv sync --frozen --group packaging
+
+      - name: Construir AppImage sin assets
+        if: runner.os == 'Linux'
+        env:
+          LITE2OBJ_SKIP_ASSETS: "1"
+        run: ./packaging/build_appimage.sh
+
+      - name: Construir .exe sin assets
+        if: runner.os == 'Windows'
+        env:
+          LITE2OBJ_SKIP_ASSETS: "1"
+        run: ./packaging/build_windows.ps1
+
+      - name: Comprobar que no se coló el pack de texturas
+        if: runner.os == 'Linux'
+        run: |
+          if find dist -name '*.l2oassets' | grep -q .; then
+            echo "La build contiene un archivo .l2oassets" >&2
+            exit 1
+          fi
+
+      - name: Comprobar que no se coló el pack de texturas
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pack = Get-ChildItem -Path dist -Filter *.l2oassets -Recurse
+          if ($pack) {
+              throw "La build contiene un archivo .l2oassets"
+          }
+
+      - name: Guardar la AppImage
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lite2obj-linux-ci
+          path: dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Guardar el .exe
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lite2obj-windows-ci
+          path: dist/lite2obj.exe
+          if-no-files-found: error
+          retention-days: 7

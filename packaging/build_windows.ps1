@@ -9,10 +9,14 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-Write-Host "==> Preparando el archivo de assets para incluirlo en el .exe"
-uv run python packaging\prepare_assets.py
-if ($LASTEXITCODE -ne 0) {
-    throw "No se pudo preparar lite2obj-assets.l2oassets"
+if ($env:LITE2OBJ_SKIP_ASSETS -eq "1") {
+    Write-Host "==> Build sin archivo de assets (LITE2OBJ_SKIP_ASSETS=1)"
+} else {
+    Write-Host "==> Preparando el archivo de assets para incluirlo en el .exe"
+    uv run python packaging\prepare_assets.py
+    if ($LASTEXITCODE -ne 0) {
+        throw "No se pudo preparar lite2obj-assets.l2oassets"
+    }
 }
 
 Write-Host "==> Construyendo lite2obj.exe con PyInstaller"

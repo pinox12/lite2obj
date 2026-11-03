@@ -4,6 +4,7 @@
 Linux genera un directorio (``dist/lite2obj``) que el script de AppImage copia a
 ``AppDir``. Windows genera un único ``dist/lite2obj.exe`` portable. La variable
 ``LITE2OBJ_ONEFILE=1`` fuerza el modo de un solo archivo en cualquier plataforma.
+``LITE2OBJ_SKIP_ASSETS=1`` omite el ``.l2oassets`` para las builds de CI/CD sin texturas.
 """
 
 from __future__ import annotations
@@ -27,15 +28,18 @@ datas.append((str(ROOT / "packaging" / "lite2obj.png"), "."))
 # El archivo de assets se incluye en el bundle para que la app funcione sin Minecraft
 # instalado. Los scripts de empaquetado lo preparan en ``build/assets`` con
 # ``packaging/prepare_assets.py``; queda ignorado por git por derechos de autor.
-# También se acepta en la raíz para builds manuales.
-asset_packs = (
-    ROOT / "build" / "assets" / "lite2obj-assets.l2oassets",
-    ROOT / "lite2obj-assets.l2oassets",
-)
-for candidate in asset_packs:
-    if candidate.is_file():
-        datas.append((str(candidate), "."))
-        break
+# También se acepta en la raíz para builds manuales. Las builds de CI/CD usan
+# ``LITE2OBJ_SKIP_ASSETS=1`` y se publican sin texturas: cada usuario genera su pack.
+SKIP_ASSETS = os.environ.get("LITE2OBJ_SKIP_ASSETS", "0") == "1"
+if not SKIP_ASSETS:
+    asset_packs = (
+        ROOT / "build" / "assets" / "lite2obj-assets.l2oassets",
+        ROOT / "lite2obj-assets.l2oassets",
+    )
+    for candidate in asset_packs:
+        if candidate.is_file():
+            datas.append((str(candidate), "."))
+            break
 
 # ``gui/__init__.py`` importa estos módulos de forma perezosa.
 hiddenimports = [

@@ -21,8 +21,12 @@ APPDIR="$ROOT/build/appimage/Lite2obj.AppDir"
 TOOLS="$ROOT/build/tools"
 APPIMAGETOOL="${APPIMAGETOOL:-}"
 
-echo "==> Preparando el archivo de assets para incluirlo en la AppImage"
-uv run python packaging/prepare_assets.py
+if [ "${LITE2OBJ_SKIP_ASSETS:-0}" = "1" ]; then
+    echo "==> Build sin archivo de assets (LITE2OBJ_SKIP_ASSETS=1)"
+else
+    echo "==> Preparando el archivo de assets para incluirlo en la AppImage"
+    uv run python packaging/prepare_assets.py
+fi
 
 echo "==> Construyendo el ejecutable con PyInstaller"
 rm -rf "$ROOT/dist/lite2obj"
