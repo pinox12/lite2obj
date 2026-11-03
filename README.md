@@ -386,8 +386,9 @@ El repositorio incluye tres workflows de GitHub Actions:
 | `.github/workflows/pages.yml` | cambios en `docs/` | Publica la landing en GitHub Pages. |
 
 La landing está en [`docs/`](docs/): es HTML, CSS y un poco de JavaScript, sin build ni
-dependencias externas. Antes de publicarla, cambia `data-repo="TU-USUARIO/lite2obj"` en
-`docs/index.html` y elige **GitHub Actions** como origen en **Settings → Pages**.
+dependencias externas. Está en español (`docs/index.html`) e inglés (`docs/en/index.html`).
+Antes de publicarla, cambia `data-repo="TU-USUARIO/lite2obj"` en las dos páginas y elige
+**GitHub Actions** como origen en **Settings → Pages**.
 
 Para publicar una versión:
 

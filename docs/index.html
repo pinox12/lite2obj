@@ -19,7 +19,12 @@
     <link rel="icon" href="assets/icon.png" />
     <link rel="apple-touch-icon" href="assets/icon.png" />
     <link rel="stylesheet" href="styles.css" />
+    <link rel="alternate" hreflang="es" href="./" />
+    <link rel="alternate" hreflang="en" href="en/" />
+    <link rel="alternate" hreflang="x-default" href="./" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:locale:alternate" content="en_US" />
     <meta property="og:title" content="lite2obj — De Litematica a Blender" />
     <meta
       property="og:description"
@@ -42,6 +47,8 @@
           class="nav-toggle"
           type="button"
           aria-label="Abrir menú"
+          data-label-open="Abrir menú"
+          data-label-close="Cerrar menú"
           aria-controls="menu"
           aria-expanded="false"
         >
@@ -54,6 +61,7 @@
           <a href="#assets">Assets</a>
           <a href="#descargas">Descargas</a>
           <a href="#faq">FAQ</a>
+          <a class="lang-link" href="en/" hreflang="en" lang="en" aria-label="Ver esta página en inglés">EN</a>
           <a
             class="button button-small"
             href="https://github.com/TU-USUARIO/lite2obj"
@@ -504,6 +512,7 @@ Archivo → Generar archivo de assets…
             >Issues</a
           >
           <a href="#assets">Assets</a>
+          <a href="en/" hreflang="en" lang="en">English</a>
         </nav>
       </div>
     </footer>

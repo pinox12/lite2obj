@@ -204,8 +204,10 @@ Pipeline order, each layer assuming the previous:
   equal `v` + `__version__`, builds the AppImage and `.exe` without assets and publishes
   them plus `SHA256SUMS`. Do not upload the asset pack or textures.
 - `.github/workflows/pages.yml` publishes `docs/` with GitHub Pages. The landing is static
-  (no build step); `docs/index.html` has `data-repo="TU-USUARIO/lite2obj"` as the single
-  placeholder for GitHub/Releases/Issues links. Update it before enabling Pages.
+  (no build step) and bilingual: `docs/index.html` is Spanish, `docs/en/index.html` is
+  English, and both share `styles.css`/`main.js`. Each page has
+  `data-repo="TU-USUARIO/lite2obj"` as the single placeholder for GitHub/Releases/Issues
+  links. Update both before enabling Pages.
 
 ## Blender validation
 

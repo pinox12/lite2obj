@@ -149,6 +149,27 @@ button {
   color: var(--text);
 }
 
+.nav-links > a.lang-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.nav-links > a.lang-link:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
 .nav-toggle {
   display: none;
   width: 42px;
@@ -1046,7 +1067,7 @@ h2 {
     padding: 12px;
     border: 1px solid var(--border-strong);
     border-radius: 14px;
-    background: rgba(17, 22, 28, 0.98);
+    background: var(--bg-soft);
     box-shadow: var(--shadow);
   }
 
@@ -1061,6 +1082,10 @@ h2 {
 
   .nav-links > a:not(.button):hover {
     background: rgba(255, 255, 255, 0.05);
+  }
+
+  .nav-links > a.lang-link {
+    align-self: flex-start;
   }
 
   .nav-links .button {
