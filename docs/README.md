@@ -7,10 +7,10 @@ Esta carpeta se publica tal cual con el workflow `.github/workflows/pages.yml`.
 1. Sustituye `TU-USUARIO` en el atributo `data-repo` de `index.html` y de `en/index.html`
    por el usuario u organización real de GitHub. Los enlaces a GitHub, Releases e Issues se
    generan a partir de ese valor.
-2. El workflow habilita Pages solo con `enablement: true` en `configure-pages`. Si tu cuenta u
-   organización no lo permite, ve a **Settings → Pages → Build and deployment** y elige
-   **GitHub Actions** como origen. Pages necesita un repositorio público o un plan que lo
-   admita.
+2. Activa Pages una vez en **Settings → Pages → Build and deployment** y elige **GitHub
+   Actions** como origen. El `GITHUB_TOKEN` del workflow no puede crear el sitio
+   (`Resource not accessible by integration`), así que este paso es manual. Pages necesita un
+   repositorio público o un plan que lo admita.
 3. Haz push a `main` o `master`. El workflow publica `docs/` en Pages.
 
 La web está en español (`index.html`) e inglés (`en/index.html`). Los enlaces de idioma del

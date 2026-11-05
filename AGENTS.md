@@ -210,9 +210,10 @@ Pipeline order, each layer assuming the previous:
   (no build step) and bilingual: `docs/index.html` is Spanish, `docs/en/index.html` is
   English, and both share `styles.css`/`main.js`. Each page has
   `data-repo="TU-USUARIO/lite2obj"` as the single placeholder for GitHub/Releases/Issues
-  links. Update both before enabling Pages. `configure-pages` uses `enablement: true` so the
-  first run creates the Pages site with the GitHub Actions source instead of failing with 404;
-  keep it unless the account requires enabling Pages manually.
+  links. Update both before enabling Pages. Pages must be enabled once by hand in
+  **Settings → Pages** with the **GitHub Actions** source: `GITHUB_TOKEN` cannot create the
+  site, and `enablement: true` fails with "Resource not accessible by integration" unless the
+  step is given a PAT or GitHub App token. Do not re-add it.
 - The repository README is bilingual: `README.md` is English (GitHub's default) and
   `README.es.md` is Spanish. Keep both in sync when changing commands, options or behavior.
 

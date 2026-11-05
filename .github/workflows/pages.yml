@@ -30,10 +30,9 @@ jobs:
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5
-        with:
-          # Habilita Pages con origen "GitHub Actions" si el repositorio aún no
-          # lo tiene; sin esto el primer despliegue falla con un 404.
-          enablement: true
+        # Pages debe estar activado una vez en Settings → Pages con origen
+        # "GitHub Actions". GITHUB_TOKEN no puede crear el sitio (enablement
+        # falla con "Resource not accessible by integration").
 
       - name: Empaquetar docs/
         uses: actions/upload-pages-artifact@v3
