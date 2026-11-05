@@ -208,6 +208,8 @@ Pipeline order, each layer assuming the previous:
   English, and both share `styles.css`/`main.js`. Each page has
   `data-repo="TU-USUARIO/lite2obj"` as the single placeholder for GitHub/Releases/Issues
   links. Update both before enabling Pages.
+- The repository README is bilingual: `README.md` is Spanish and `README.en.md` is English.
+  Keep both in sync when changing commands, options or behavior.
 
 ## Blender validation
 
