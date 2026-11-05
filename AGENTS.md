@@ -199,7 +199,10 @@ Pipeline order, each layer assuming the previous:
   do not remove the env check from `lite2obj.spec`.
 - `.github/workflows/ci.yml` runs `ruff format --check`, `ruff check`, `mypy src` and
   `pytest` on Ubuntu and Windows. On push it also builds both portables without assets and
-  fails if any `.l2oassets` ends up under `dist/`.
+  fails if any `.l2oassets` ends up under `dist/`. The Ubuntu jobs install
+  `libegl1 libgl1 libfontconfig1 libxkbcommon0 libdbus-1-3` first: `PySide6.QtGui` links
+  `libEGL.so.1` and the GitHub runner image does not ship it, so `tests/test_gui.py` fails
+  at import without those packages.
 - `.github/workflows/release.yml` runs on tags `v*` (or a manual tag), requires the tag to
   equal `v` + `__version__`, builds the AppImage and `.exe` without assets and publishes
   them plus `SHA256SUMS`. Do not upload the asset pack or textures.

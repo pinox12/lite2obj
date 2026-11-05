@@ -27,6 +27,13 @@ jobs:
       - name: Descargar el repositorio
         uses: actions/checkout@v4
 
+      - name: Instalar bibliotecas de Qt (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libfontconfig1 libxkbcommon0 libdbus-1-3
+
       - name: Instalar uv
         uses: astral-sh/setup-uv@v6
         with:
@@ -60,6 +67,13 @@ jobs:
     steps:
       - name: Descargar el repositorio
         uses: actions/checkout@v4
+
+      - name: Instalar bibliotecas de Qt (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libfontconfig1 libxkbcommon0 libdbus-1-3
 
       - name: Instalar uv
         uses: astral-sh/setup-uv@v6
