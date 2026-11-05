@@ -397,8 +397,8 @@ ejecución; si tu cuenta u organización no lo permite, actívalo a mano en **Se
 Para publicar una versión:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 El tag debe coincidir con `__version__` de `src/lite2obj/__init__.py`. Las builds de la
