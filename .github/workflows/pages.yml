@@ -30,6 +30,10 @@ jobs:
 
       - name: Configurar Pages
         uses: actions/configure-pages@v5
+        with:
+          # Habilita Pages con origen "GitHub Actions" si el repositorio aún no
+          # lo tiene; sin esto el primer despliegue falla con un 404.
+          enablement: true
 
       - name: Empaquetar docs/
         uses: actions/upload-pages-artifact@v3

@@ -367,7 +367,9 @@ The repository includes three GitHub Actions workflows:
 The landing page is in [`docs/`](docs/): it is HTML, CSS and a little JavaScript, with no build or
 external dependencies. It is available in Spanish (`docs/index.html`) and English
 (`docs/en/index.html`). Before publishing it, change `data-repo="TU-USUARIO/lite2obj"` in both
-pages and choose **GitHub Actions** as the source in **Settings → Pages**.
+pages. The workflow's `configure-pages` step enables Pages with the GitHub Actions source on the
+first run; if your account or organisation does not allow that, enable it manually in
+**Settings → Pages** (source: **GitHub Actions**).
 
 To publish a version:
 
