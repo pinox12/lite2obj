@@ -474,9 +474,6 @@ El repositorio incluye tres workflows de GitHub Actions:
 
 La landing está en [`docs/`](docs/): es HTML, CSS y un poco de JavaScript, sin build ni
 dependencias externas. Está en español (`docs/index.html`) e inglés (`docs/en/index.html`).
-Antes de publicarla, cambia `data-repo="TU-USUARIO/lite2obj"` en las dos páginas y activa Pages
-una vez en **Settings → Pages → Build and deployment** con origen **GitHub Actions**. El
-`GITHUB_TOKEN` del workflow no puede crear el sitio, así que este primer paso es manual.
 
 Para publicar una versión:
 

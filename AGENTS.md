@@ -213,7 +213,7 @@ Pipeline order, each layer assuming the previous:
 - `.github/workflows/pages.yml` publishes `docs/` with GitHub Pages. The landing is static
   (no build step) and bilingual: `docs/index.html` is Spanish, `docs/en/index.html` is
   English, and both share `styles.css`/`main.js`. Each page has
-  `data-repo="TU-USUARIO/lite2obj"` as the single placeholder for GitHub/Releases/Issues
+  `data-repo="pinox12/lite2obj"` as the single placeholder for GitHub/Releases/Issues
   links. Update both before enabling Pages. Pages must be enabled once by hand in
   **Settings → Pages** with the **GitHub Actions** source: `GITHUB_TOKEN` cannot create the
   site, and `enablement: true` fails with "Resource not accessible by integration" unless the
