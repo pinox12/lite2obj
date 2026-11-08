@@ -1,6 +1,6 @@
 [project]
 name = "lite2obj"
-version = "1.0.0"
+version = "1.1.0"
 description = "Render .litematic schematics in 3D and export them to Blender (OBJ/MTL)"
 readme = "README.md"
 authors = [
