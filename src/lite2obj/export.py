@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .i18n import _
 from .mesh import Mesh
 
 __all__ = [
@@ -83,7 +84,7 @@ def _apply_axis(array: np.ndarray, up_axis: str) -> np.ndarray:
     if up_axis == "y":
         return array
     if up_axis != "z":
-        raise ValueError(f"up_axis desconocido: {up_axis!r}")
+        raise ValueError(_("up_axis desconocido: {axis!r}").format(axis=up_axis))
     rotated = np.empty_like(array)
     rotated[..., 0] = array[..., 0]
     rotated[..., 1] = array[..., 2]
@@ -152,7 +153,7 @@ def _face_order(mesh: Mesh, group_by: str) -> np.ndarray:
     if group_by == "alpha":
         return np.argsort(mesh.alpha_mode, kind="stable")
     if group_by != "none":
-        raise ValueError(f"group_by desconocido: {group_by!r}")
+        raise ValueError(_("group_by desconocido: {value!r}").format(value=group_by))
     return np.arange(mesh.quad_count, dtype=np.int64)
 
 
@@ -186,8 +187,14 @@ def export_obj(
 
     with obj_path.open("w", encoding="utf-8", newline="\n") as handle:
         if options.comments:
-            handle.write(f"# lite2obj - {mesh.quad_count} caras, {len(positions)} vertices\n")
-            handle.write(f"# origen {mesh.origin}  tamano {mesh.size}\n")
+            handle.write(
+                _("# lite2obj - {faces} caras, {vertices} vertices\n").format(
+                    faces=mesh.quad_count, vertices=len(positions)
+                )
+            )
+            handle.write(
+                _("# origen {origin}  tamano {size}\n").format(origin=mesh.origin, size=mesh.size)
+            )
         if mtl_path is not None:
             handle.write(f"mtllib {mtl_path.name}\n")
 

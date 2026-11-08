@@ -17,7 +17,17 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QRunnable, QSettings, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import (
+    QLibraryInfo,
+    QObject,
+    QRunnable,
+    QSettings,
+    Qt,
+    QThreadPool,
+    QTimer,
+    QTranslator,
+    Signal,
+)
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPalette, QSurfaceFormat
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -47,9 +57,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import assetpack, assets, associations, litematic, paths
+from .. import assetpack, assets, associations, i18n, litematic, paths
 from ..assets import ResourceManager
 from ..export import ExportOptions, ExportResult, export_obj
+from ..i18n import _
 from ..mesh import Mesh, MeshBuilder
 from ..models import ModelResolver
 from ..pipeline import RenderOptions, build_resources
@@ -57,11 +68,30 @@ from .viewport import Viewport
 
 __all__ = ["MainWindow", "main", "run"]
 
-_LITEMATIC_FILTER = "Litematica (*.litematic);;Todos los archivos (*)"
-_PNG_FILTER = "PNG (*.png);;Todos los archivos (*)"
-_ASSET_PACK_FILTER = "Assets de lite2obj (*.l2oassets);;Todos los archivos (*)"
-_JAR_FILTER = "Minecraft client (*.jar);;Todos los archivos (*)"
-_PACK_FILTER = "Resource pack (*.zip);;Todos los archivos (*)"
+#: Traductores de Qt instalados (la lista evita que el recolector los libere).
+_QT_TRANSLATORS: list[QTranslator] = []
+
+
+def _litematic_filter() -> str:
+    return _("Litematica (*.litematic);;Todos los archivos (*)")
+
+
+def _png_filter() -> str:
+    return _("PNG (*.png);;Todos los archivos (*)")
+
+
+def _asset_pack_filter() -> str:
+    return _("Assets de lite2obj (*.l2oassets);;Todos los archivos (*)")
+
+
+def _jar_filter() -> str:
+    return _("Minecraft client (*.jar);;Todos los archivos (*)")
+
+
+def _pack_filter() -> str:
+    return _("Resource pack (*.zip);;Todos los archivos (*)")
+
+
 _DEMO_SCHEMATIC_NAME = "all_blocks_and_entities.litematic"
 
 
@@ -124,31 +154,35 @@ def _asset_status(
     """
     if pack is None:
         return (
-            "✗  Assets base de Minecraft no configurados",
-            "Genera el archivo .l2oassets desde un client jar.",
+            _("✗  Assets base de Minecraft no configurados"),
+            _("Genera el archivo .l2oassets desde un client jar."),
             "#e8b45a",
         )
     if not assetpack.is_asset_pack(pack):
         return (
-            "✗  El archivo de assets no es válido",
-            f"{pack.name} · vuelve a generarlo desde un client jar.",
+            _("✗  El archivo de assets no es válido"),
+            _("{name} · vuelve a generarlo desde un client jar.").format(name=pack.name),
             "#e8b45a",
         )
     manifest = assetpack.read_manifest(pack) or {}
-    version = manifest.get("minecraft_version") or "desconocida"
-    detail = f"Generados desde Minecraft {version} · {pack.name}"
+    version = manifest.get("minecraft_version") or _("desconocida")
+    detail = _("Generados desde Minecraft {version} · {name}").format(
+        version=version, name=pack.name
+    )
     if missing:
         shown = ", ".join(missing[:5])
         if len(missing) > 5:
-            shown += f" y {len(missing) - 5} más"
+            shown += " " + _("y {count} más").format(count=len(missing) - 5)
         count = missing_count or len(missing)
         return (
-            "⚠  Hay bloques que no están en los assets",
-            f"{detail}\n{count:,} bloque(s) omitidos: {shown}. "
-            "Actualiza el .l2oassets con un client jar más reciente.",
+            _("⚠  Hay bloques que no están en los assets"),
+            _(
+                "{detail}\n{count:,} bloque(s) omitidos: {shown}. "
+                "Actualiza el .l2oassets con un client jar más reciente."
+            ).format(detail=detail, count=count, shown=shown),
             "#e8b45a",
         )
-    return ("✓  Assets base de Minecraft configurados", detail, "#58c27d")
+    return (_("✓  Assets base de Minecraft configurados"), detail, "#58c27d")
 
 
 def _demo_schematic_path() -> Path:
@@ -244,6 +278,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, initial: Path | None = None) -> None:
         super().__init__()
+        i18n.configure()
         self.settings = QSettings("lite2obj", "lite2obj")
         self.setWindowTitle("lite2obj")
         self.resize(1360, 860)
@@ -317,27 +352,27 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         # Esquemático
-        schematic_group = QGroupBox("Esquemático")
+        schematic_group = QGroupBox(_("Esquemático"))
         schematic_layout = QVBoxLayout(schematic_group)
-        hint = QLabel("Abre un .litematic o arrástralo sobre la ventana.")
+        hint = QLabel(_("Abre un .litematic o arrástralo sobre la ventana."))
         hint.setWordWrap(True)
         hint.setObjectName("hint")
         schematic_layout.addWidget(hint)
         open_row = QHBoxLayout()
-        self.open_button = QPushButton("Abrir…")
-        self.reload_button = QPushButton("Recargar")
-        self.reload_button.setToolTip("Vuelve a leer el esquemático actual")
+        self.open_button = QPushButton(_("Abrir…"))
+        self.reload_button = QPushButton(_("Recargar"))
+        self.reload_button.setToolTip(_("Vuelve a leer el esquemático actual"))
         open_row.addWidget(self.open_button)
         open_row.addWidget(self.reload_button)
         schematic_layout.addLayout(open_row)
-        self.info_label = QLabel("Ningún esquemático abierto.")
+        self.info_label = QLabel(_("Ningún esquemático abierto."))
         self.info_label.setWordWrap(True)
         self.info_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         schematic_layout.addWidget(self.info_label)
         layout.addWidget(schematic_group)
 
         # Assets
-        assets_group = QGroupBox("Assets de Minecraft")
+        assets_group = QGroupBox(_("Assets de Minecraft"))
         assets_layout = QVBoxLayout(assets_group)
         self.assets_status = QLabel()
         self.assets_status.setWordWrap(True)
@@ -346,8 +381,8 @@ class MainWindow(QMainWindow):
         self.assets_label.setWordWrap(True)
         self.assets_label.setObjectName("hint")
         assets_layout.addWidget(self.assets_label)
-        self.assets_button = QPushButton("Generar archivo de assets…")
-        self.assets_button.setToolTip("Elige el client jar de Minecraft y genera el .l2oassets")
+        self.assets_button = QPushButton(_("Generar archivo de assets…"))
+        self.assets_button.setToolTip(_("Elige el client jar de Minecraft y genera el .l2oassets"))
         assets_layout.addWidget(self.assets_button)
         layout.addWidget(assets_group)
 
@@ -355,9 +390,11 @@ class MainWindow(QMainWindow):
         packs_group = QGroupBox("Resource packs")
         packs_layout = QVBoxLayout(packs_group)
         packs_hint = QLabel(
-            "Opcional. Arriba = mayor prioridad. Los assets que falten se toman del "
-            "archivo vanilla. Puedes añadir varios .zip a la vez o una carpeta con varios "
-            "packs."
+            _(
+                "Opcional. Arriba = mayor prioridad. Los assets que falten se toman del "
+                "archivo vanilla. Puedes añadir varios .zip a la vez o una carpeta con varios "
+                "packs."
+            )
         )
         packs_hint.setWordWrap(True)
         packs_hint.setObjectName("hint")
@@ -365,55 +402,55 @@ class MainWindow(QMainWindow):
         self.pack_list = QListWidget()
         self.pack_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.pack_list.setFixedHeight(140)
-        self.pack_list.setToolTip("Marca los packs que quieres aplicar al render")
+        self.pack_list.setToolTip(_("Marca los packs que quieres aplicar al render"))
         packs_layout.addWidget(self.pack_list)
         add_row = QHBoxLayout()
-        self.pack_add_file = QPushButton("Añadir .zip…")
-        self.pack_add_file.setToolTip("Añade uno o varios resource packs comprimidos")
-        self.pack_add_dir = QPushButton("Añadir carpeta…")
-        self.pack_add_dir.setToolTip("Añade un pack o todos los que contenga una carpeta")
+        self.pack_add_file = QPushButton(_("Añadir .zip…"))
+        self.pack_add_file.setToolTip(_("Añade uno o varios resource packs comprimidos"))
+        self.pack_add_dir = QPushButton(_("Añadir carpeta…"))
+        self.pack_add_dir.setToolTip(_("Añade un pack o todos los que contenga una carpeta"))
         add_row.addWidget(self.pack_add_file)
         add_row.addWidget(self.pack_add_dir)
         packs_layout.addLayout(add_row)
         move_row = QHBoxLayout()
-        self.pack_up = QPushButton("Subir")
-        self.pack_down = QPushButton("Bajar")
-        self.pack_remove = QPushButton("Quitar")
+        self.pack_up = QPushButton(_("Subir"))
+        self.pack_down = QPushButton(_("Bajar"))
+        self.pack_remove = QPushButton(_("Quitar"))
         move_row.addWidget(self.pack_up)
         move_row.addWidget(self.pack_down)
         move_row.addWidget(self.pack_remove)
         packs_layout.addLayout(move_row)
         layout.addWidget(packs_group)
 
-        self.dirty_label = QLabel("Hay cambios sin aplicar. Pulsa Renderizar (F5).")
+        self.dirty_label = QLabel(_("Hay cambios sin aplicar. Pulsa Renderizar (F5)."))
         self.dirty_label.setObjectName("warning")
         self.dirty_label.setWordWrap(True)
         self.dirty_label.hide()
         layout.addWidget(self.dirty_label)
 
-        self.render_button = QPushButton("Renderizar")
-        self.render_button.setToolTip("Vuelve a generar la malla con las opciones actuales (F5)")
+        self.render_button = QPushButton(_("Renderizar"))
+        self.render_button.setToolTip(_("Vuelve a generar la malla con las opciones actuales (F5)"))
         layout.addWidget(self.render_button)
 
         # Vista
-        view_group = QGroupBox("Vista y render")
+        view_group = QGroupBox(_("Vista y render"))
         view_layout = QVBoxLayout(view_group)
-        self.cull_check = QCheckBox("Descartar caras ocultas")
+        self.cull_check = QCheckBox(_("Descartar caras ocultas"))
         self.cull_check.setChecked(True)
-        self.cull_check.setToolTip("Activa el culling por cullface del modelo")
-        self.tint_check = QCheckBox("Teñir biomas (plains)")
+        self.cull_check.setToolTip(_("Activa el culling por cullface del modelo"))
+        self.tint_check = QCheckBox(_("Teñir biomas (plains)"))
         self.tint_check.setChecked(True)
-        self.mobs_check = QCheckBox("Dibujar mobs")
+        self.mobs_check = QCheckBox(_("Dibujar mobs"))
         self.mobs_check.setChecked(False)
-        self.mobs_check.setToolTip("Criaturas como cerdos, aldeanos o monstruos (desactivado)")
-        self.droped_items_check = QCheckBox("Dibujar items caídos")
+        self.mobs_check.setToolTip(_("Criaturas como cerdos, aldeanos o monstruos (desactivado)"))
+        self.droped_items_check = QCheckBox(_("Dibujar items caídos"))
         self.droped_items_check.setChecked(False)
-        self.droped_items_check.setToolTip("Items caídos en el suelo (desactivado)")
-        self.smooth_check = QCheckBox("Suavizar texturas")
-        self.smooth_check.setToolTip("Filtrado lineal con mipmaps en el visor")
-        self.grid_check = QCheckBox("Mostrar rejilla")
+        self.droped_items_check.setToolTip(_("Items caídos en el suelo (desactivado)"))
+        self.smooth_check = QCheckBox(_("Suavizar texturas"))
+        self.smooth_check.setToolTip(_("Filtrado lineal con mipmaps en el visor"))
+        self.grid_check = QCheckBox(_("Mostrar rejilla"))
         self.grid_check.setChecked(True)
-        self.axes_check = QCheckBox("Mostrar ejes")
+        self.axes_check = QCheckBox(_("Mostrar ejes"))
         self.axes_check.setChecked(True)
         self.wire_check = QCheckBox("Wireframe")
         for widget in (
@@ -429,20 +466,20 @@ class MainWindow(QMainWindow):
             view_layout.addWidget(widget)
 
         scale_row = QHBoxLayout()
-        scale_row.addWidget(QLabel("Resolución del atlas"))
+        scale_row.addWidget(QLabel(_("Resolución del atlas")))
         self.atlas_scale_combo = QComboBox()
         for value in (1, 2, 4):
             self.atlas_scale_combo.addItem(f"×{value}", value)
-        self.atlas_scale_combo.setToolTip("Multiplica el tamaño de las texturas del atlas")
+        self.atlas_scale_combo.setToolTip(_("Multiplica el tamaño de las texturas del atlas"))
         scale_row.addWidget(self.atlas_scale_combo, 1)
         view_layout.addLayout(scale_row)
 
         layer_row = QHBoxLayout()
-        layer_row.addWidget(QLabel("Capas Y"))
+        layer_row.addWidget(QLabel(_("Capas Y")))
         self.layer_min_slider = QSlider(Qt.Orientation.Horizontal)
         self.layer_max_slider = QSlider(Qt.Orientation.Horizontal)
-        self.layer_min_slider.setToolTip("Primera capa visible")
-        self.layer_max_slider.setToolTip("Última capa visible")
+        self.layer_min_slider.setToolTip(_("Primera capa visible"))
+        self.layer_max_slider.setToolTip(_("Última capa visible"))
         layer_row.addWidget(self.layer_min_slider)
         layer_row.addWidget(self.layer_max_slider)
         view_layout.addLayout(layer_row)
@@ -451,7 +488,7 @@ class MainWindow(QMainWindow):
         view_layout.addWidget(self.layer_label)
 
         colors_row = QHBoxLayout()
-        self.bg_button = QPushButton("Color de fondo")
+        self.bg_button = QPushButton(_("Color de fondo"))
         colors_row.addWidget(self.bg_button)
         colors_row.addStretch(1)
         view_layout.addLayout(colors_row)
@@ -459,7 +496,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(view_group)
 
         # Exportación
-        export_group = QGroupBox("Exportar a Blender")
+        export_group = QGroupBox(_("Exportar a Blender"))
         export_layout = QFormLayout(export_group)
         self.out_dir = QLineEdit()
         self.out_dir.setText(str(self.app_dir() / "lite2obj_out"))
@@ -468,30 +505,30 @@ class MainWindow(QMainWindow):
         self.out_dir_button = QPushButton("…")
         self.out_dir_button.setFixedWidth(34)
         dir_row.addWidget(self.out_dir_button)
-        export_layout.addRow("Carpeta", dir_row)
+        export_layout.addRow(_("Carpeta"), dir_row)
         self.name_edit = QLineEdit()
-        export_layout.addRow("Nombre", self.name_edit)
+        export_layout.addRow(_("Nombre"), self.name_edit)
         self.group_combo = QComboBox()
-        self.group_combo.addItem("Ninguna", "none")
-        self.group_combo.addItem("Por bloque", "block")
-        self.group_combo.addItem("Por transparencia", "alpha")
+        self.group_combo.addItem(_("Ninguna"), "none")
+        self.group_combo.addItem(_("Por bloque"), "block")
+        self.group_combo.addItem(_("Por transparencia"), "alpha")
         self.group_combo.setCurrentIndex(1)
-        export_layout.addRow("Agrupar", self.group_combo)
+        export_layout.addRow(_("Agrupar"), self.group_combo)
         self.scale_spin = QDoubleSpinBox()
         self.scale_spin.setRange(0.01, 1000.0)
         self.scale_spin.setDecimals(3)
         self.scale_spin.setSingleStep(0.1)
         self.scale_spin.setValue(1.0)
-        export_layout.addRow("Escala OBJ", self.scale_spin)
-        self.z_up_check = QCheckBox("Z arriba (nativo de Blender)")
+        export_layout.addRow(_("Escala OBJ"), self.scale_spin)
+        self.z_up_check = QCheckBox(_("Z arriba (nativo de Blender)"))
         export_layout.addRow("", self.z_up_check)
-        self.export_button = QPushButton("Exportar OBJ…")
-        self.export_button.setToolTip("Escribe <nombre>.obj, <nombre>.mtl y atlas.png")
+        self.export_button = QPushButton(_("Exportar OBJ…"))
+        self.export_button.setToolTip(_("Escribe <nombre>.obj, <nombre>.mtl y atlas.png"))
         export_layout.addRow(self.export_button)
         layout.addWidget(export_group)
 
         # Estadísticas
-        stats_group = QGroupBox("Estadísticas")
+        stats_group = QGroupBox(_("Estadísticas"))
         stats_layout = QVBoxLayout(stats_group)
         self.stats_label = QLabel("—")
         self.stats_label.setWordWrap(True)
@@ -518,36 +555,36 @@ class MainWindow(QMainWindow):
         return Path(__file__).resolve().parent
 
     def _build_actions(self) -> None:
-        self.open_action = QAction("Abrir esquemático…", self)
+        self.open_action = QAction(_("Abrir esquemático…"), self)
         self.open_action.setShortcut(QKeySequence.StandardKey.Open)
         self.open_action.triggered.connect(self._open_dialog)
 
-        self.render_action = QAction("Renderizar", self)
+        self.render_action = QAction(_("Renderizar"), self)
         self.render_action.setShortcut(QKeySequence("F5"))
         self.render_action.triggered.connect(lambda: self.render_mesh())
 
-        self.export_action = QAction("Exportar OBJ…", self)
+        self.export_action = QAction(_("Exportar OBJ…"), self)
         self.export_action.setShortcut(QKeySequence("Ctrl+E"))
         self.export_action.triggered.connect(self.export)
 
-        self.screenshot_action = QAction("Guardar captura…", self)
+        self.screenshot_action = QAction(_("Guardar captura…"), self)
         self.screenshot_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
         self.screenshot_action.triggered.connect(self._screenshot)
 
-        self.quit_action = QAction("Salir", self)
+        self.quit_action = QAction(_("Salir"), self)
         self.quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         self.quit_action.triggered.connect(lambda: self.close())
 
-        self.fit_action = QAction("Reencuadrar", self)
+        self.fit_action = QAction(_("Reencuadrar"), self)
         self.fit_action.setShortcut(QKeySequence("F"))
         self.fit_action.triggered.connect(lambda: self.viewport.fit())
 
-        self.grid_action = QAction("Rejilla", self)
+        self.grid_action = QAction(_("Rejilla"), self)
         self.grid_action.setCheckable(True)
         self.grid_action.setChecked(True)
         self.grid_action.setShortcut(QKeySequence("G"))
 
-        self.axes_action = QAction("Ejes", self)
+        self.axes_action = QAction(_("Ejes"), self)
         self.axes_action.setCheckable(True)
         self.axes_action.setChecked(True)
 
@@ -555,37 +592,37 @@ class MainWindow(QMainWindow):
         self.wire_action.setCheckable(True)
         self.wire_action.setShortcut(QKeySequence("W"))
 
-        self.assets_action = QAction("Generar archivo de assets…", self)
+        self.assets_action = QAction(_("Generar archivo de assets…"), self)
         self.assets_action.setToolTip(
-            "Elige el client jar de Minecraft y extrae blockstates, modelos y texturas"
+            _("Elige el client jar de Minecraft y extrae blockstates, modelos y texturas")
         )
         self.assets_action.triggered.connect(lambda: self._generate_asset_pack())
 
-        self.associate_action = QAction("Asociar archivos .litematic…", self)
+        self.associate_action = QAction(_("Asociar archivos .litematic…"), self)
         self.associate_action.setToolTip(
-            "Haz que los .litematic se abran con lite2obj al hacer doble clic"
+            _("Haz que los .litematic se abran con lite2obj al hacer doble clic")
         )
         self.associate_action.triggered.connect(lambda: self._install_association())
-        self.unassociate_action = QAction("Quitar asociación de .litematic", self)
-        self.unassociate_action.setToolTip("Deshace la asociación creada desde lite2obj")
+        self.unassociate_action = QAction(_("Quitar asociación de .litematic"), self)
+        self.unassociate_action.setToolTip(_("Deshace la asociación creada desde lite2obj"))
         self.unassociate_action.triggered.connect(lambda: self._remove_association())
         if not associations.supported():
             self.associate_action.setEnabled(False)
             self.unassociate_action.setEnabled(False)
 
-        self.demo_action = QAction("Renderizar litemática de prueba", self)
-        self.demo_action.setToolTip("Abre y renderiza all_blocks_and_entities.litematic")
+        self.demo_action = QAction(_("Renderizar litemática de prueba"), self)
+        self.demo_action.setToolTip(_("Abre y renderiza all_blocks_and_entities.litematic"))
         self.demo_action.triggered.connect(lambda: self._render_demo())
 
-        self.about_action = QAction("Acerca de lite2obj", self)
+        self.about_action = QAction(_("Acerca de lite2obj"), self)
         self.about_action.triggered.connect(lambda: self._about())
 
-        self.smooth_action = QAction("Suavizar texturas", self)
+        self.smooth_action = QAction(_("Suavizar texturas"), self)
         self.smooth_action.setCheckable(True)
         self.smooth_action.toggled.connect(self.smooth_check.setChecked)
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("Archivo")
+        file_menu = self.menuBar().addMenu(_("Archivo"))
         file_menu.addAction(self.open_action)
         file_menu.addAction(self.render_action)
         file_menu.addAction(self.export_action)
@@ -598,7 +635,7 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
-        view_menu = self.menuBar().addMenu("Ver")
+        view_menu = self.menuBar().addMenu(_("Ver"))
         view_menu.addAction(self.fit_action)
         view_menu.addSeparator()
         view_menu.addAction(self.grid_action)
@@ -606,13 +643,13 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.wire_action)
         view_menu.addAction(self.smooth_action)
 
-        help_menu = self.menuBar().addMenu("Ayuda")
+        help_menu = self.menuBar().addMenu(_("Ayuda"))
         help_menu.addAction(self.demo_action)
         help_menu.addSeparator()
         help_menu.addAction(self.about_action)
 
     def _build_toolbar(self) -> None:
-        toolbar = self.addToolBar("Principal")
+        toolbar = self.addToolBar(_("Principal"))
         toolbar.setMovable(False)
         toolbar.addAction(self.open_action)
         toolbar.addAction(self.render_action)
@@ -625,7 +662,7 @@ class MainWindow(QMainWindow):
     def _build_status(self) -> None:
         status = QStatusBar(self)
         self.setStatusBar(status)
-        self.status_label = QLabel("Listo")
+        self.status_label = QLabel(_("Listo"))
         status.addWidget(self.status_label, 1)
         self.progress = QProgressBar()
         self.progress.setFixedWidth(220)
@@ -693,14 +730,15 @@ class MainWindow(QMainWindow):
     def _show_missing_assets(self) -> None:
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Warning)
-        box.setWindowTitle("Faltan las texturas de Minecraft")
-        box.setText("No se encontró el archivo de assets de Minecraft.")
+        box.setWindowTitle(_("Faltan las texturas de Minecraft"))
+        box.setText(_("No se encontró el archivo de assets de Minecraft."))
         box.setInformativeText(
-            f"{assets.MISSING_ASSET_PACK_MESSAGE}\n\n"
-            "También puedes generarlo ahora eligiendo el client jar."
+            assets.missing_asset_pack_message()
+            + "\n\n"
+            + _("También puedes generarlo ahora eligiendo el client jar.")
         )
-        generate = box.addButton("Generar ahora…", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton("Cerrar", QMessageBox.ButtonRole.RejectRole)
+        generate = box.addButton(_("Generar ahora…"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(_("Cerrar"), QMessageBox.ButtonRole.RejectRole)
         box.exec()
         if box.clickedButton() is generate:
             self._generate_asset_pack()
@@ -773,14 +811,16 @@ class MainWindow(QMainWindow):
     def _add_pack_dialog(self, as_dir: bool) -> None:
         start = str(self.settings.value("last_pack_dir", str(Path.home())))
         if as_dir:
-            directory = QFileDialog.getExistingDirectory(self, "Añadir resource packs", start)
+            directory = QFileDialog.getExistingDirectory(self, _("Añadir resource packs"), start)
             if not directory:
                 return
             path = Path(directory)
             self.settings.setValue("last_pack_dir", str(path))
             self._add_pack_directory(path)
             return
-        chosen, _ = QFileDialog.getOpenFileNames(self, "Añadir resource packs", start, _PACK_FILTER)
+        chosen, _filter = QFileDialog.getOpenFileNames(
+            self, _("Añadir resource packs"), start, _pack_filter()
+        )
         if not chosen:
             return
         paths = [Path(item) for item in chosen]
@@ -792,7 +832,7 @@ class MainWindow(QMainWindow):
         packs = _resource_packs_in(directory)
         if not packs:
             self._show_error(
-                "No se encontraron resource packs en la carpeta.",
+                _("No se encontraron resource packs en la carpeta."),
                 f"{directory}\n\nElige un .zip, una carpeta con 'assets' o una carpeta "
                 "que contenga varios packs.",
             )
@@ -830,7 +870,7 @@ class MainWindow(QMainWindow):
             self._packs_changed()
         if invalid:
             self._show_error(
-                "Algunos resource packs no son válidos.",
+                _("Algunos resource packs no son válidos."),
                 "\n".join(str(path) for path in invalid)
                 + "\n\nDeben ser archivos .zip o carpetas con una subcarpeta 'assets'.",
             )
@@ -884,7 +924,7 @@ class MainWindow(QMainWindow):
         try:
             document = litematic.load(path)
         except Exception:
-            self._show_error("No se pudo leer el esquemático.", traceback.format_exc())
+            self._show_error(_("No se pudo leer el esquemático."), traceback.format_exc())
             return
 
         self.path = path
@@ -904,16 +944,20 @@ class MainWindow(QMainWindow):
 
     def _update_info(self) -> None:
         if self.doc is None or self.path is None:
-            self.info_label.setText("Ningún esquemático abierto.")
+            self.info_label.setText(_("Ningún esquemático abierto."))
             return
         size = self.doc.enclosing_size
         lines = [
             self.doc.name or self.path.stem,
-            f"{size[0]} × {size[1]} × {size[2]} bloques",
-            f"{len(self.doc.regions)} región(es) · {self.doc.block_count:,} bloques",
+            _("{width} × {height} × {depth} bloques").format(
+                width=size[0], height=size[1], depth=size[2]
+            ),
+            _("{regions} región(es) · {blocks:,} bloques").format(
+                regions=len(self.doc.regions), blocks=self.doc.block_count
+            ),
         ]
         if self.doc.author:
-            lines.append(f"Autor: {self.doc.author}")
+            lines.append(_("Autor: {author}").format(author=self.doc.author))
         self.info_label.setText("\n".join(lines))
 
     def _configure_layers(self, height: int) -> None:
@@ -933,7 +977,9 @@ class MainWindow(QMainWindow):
         height = max(self.doc.enclosing_size[1], 1)
         low = min(self.layer_min_slider.value(), self.layer_max_slider.value())
         high = max(self.layer_min_slider.value(), self.layer_max_slider.value())
-        self.layer_label.setText(f"Capas Y: {low}–{high} de {height - 1}")
+        self.layer_label.setText(
+            _("Capas Y: {low}–{high} de {maximum}").format(low=low, high=high, maximum=height - 1)
+        )
         self.viewport.set_layer(low, high + 1)
 
     def _render_options(self) -> RenderOptions:
@@ -1008,29 +1054,46 @@ class MainWindow(QMainWindow):
         if self._export_after_render:
             self._export_after_render = False
             if self._dirty:
-                self.status_label.setText("Hay cambios pendientes; vuelve a exportar")
+                self.status_label.setText(_("Hay cambios pendientes; vuelve a exportar"))
             else:
                 self._start_export(mesh)
         elif not self._dirty:
-            self.status_label.setText("Malla lista")
+            self.status_label.setText(_("Malla lista"))
 
     def _update_stats(self, mesh: Mesh) -> None:
         stats = mesh.stats()
         width, height = mesh.atlas.size
         elapsed = max(time.perf_counter() - self._render_started, 0.0)
         self.stats_label.setText(
-            f"Tamaño: {mesh.size[0]} × {mesh.size[1]} × {mesh.size[2]} bloques\n"
-            f"Caras: {mesh.quad_count:,} ({mesh.quad_count * 2:,} triángulos)\n"
-            f"Bloques: {len(mesh.palette):,} estados distintos\n"
-            f"Sprites: {stats['sprites']} · atlas {width}×{height}\n"
-            f"Tiempo: {elapsed:.2f} s"
+            _(
+                "Tamaño: {width} × {height} × {depth} bloques\n"
+                "Caras: {faces:,} ({triangles:,} triángulos)\n"
+                "Bloques: {states:,} estados distintos\n"
+                "Sprites: {sprites} · atlas {atlas_width}×{atlas_height}\n"
+                "Tiempo: {elapsed:.2f} s"
+            ).format(
+                width=mesh.size[0],
+                height=mesh.size[1],
+                depth=mesh.size[2],
+                faces=mesh.quad_count,
+                triangles=mesh.quad_count * 2,
+                states=len(mesh.palette),
+                sprites=stats["sprites"],
+                atlas_width=width,
+                atlas_height=height,
+                elapsed=elapsed,
+            )
         )
         if mesh.missing_blocks:
             names = ", ".join(mesh.missing_blocks[:5])
             if len(mesh.missing_blocks) > 5:
-                names += f" y {len(mesh.missing_blocks) - 5} más"
+                names += " " + _("y {count} más").format(count=len(mesh.missing_blocks) - 5)
             self.stats_label.setText(
-                self.stats_label.text() + f"\n⚠ Omitidos: {mesh.missing_count:,} bloques ({names})"
+                self.stats_label.text()
+                + "\n"
+                + _("⚠ Omitidos: {count:,} bloques ({names})").format(
+                    count=mesh.missing_count, names=names
+                )
             )
 
     def _invalidate(self, *_args) -> None:
@@ -1039,13 +1102,13 @@ class MainWindow(QMainWindow):
         self._dirty = True
         self.dirty_label.show()
         if not self._busy:
-            self.status_label.setText("Opciones cambiadas")
+            self.status_label.setText(_("Opciones cambiadas"))
 
     # -- exportación -------------------------------------------------------- #
 
     def export(self) -> None:
         if self.path is None:
-            self.status_label.setText("Abre un esquemático antes de exportar")
+            self.status_label.setText(_("Abre un esquemático antes de exportar"))
             return
         if self._busy:
             return
@@ -1053,7 +1116,7 @@ class MainWindow(QMainWindow):
             return
         if self.mesh is None or self._dirty or self._mesh_key != self._render_key():
             self._export_after_render = True
-            self.status_label.setText("Renderizando antes de exportar…")
+            self.status_label.setText(_("Renderizando antes de exportar…"))
             self.render_mesh()
             return
         self._start_export(self.mesh)
@@ -1084,14 +1147,16 @@ class MainWindow(QMainWindow):
             f"MTL:   {result.mtl}" if result.mtl else "",
             f"Atlas: {result.atlas}" if result.atlas else "",
             "",
-            f"{result.faces:,} caras · {result.vertices:,} vértices · {result.uvs:,} UVs",
+            _("{faces:,} caras · {vertices:,} vértices · {uvs:,} UVs").format(
+                faces=result.faces, vertices=result.vertices, uvs=result.uvs
+            ),
         ]
         message = "\n".join(line for line in lines if line)
-        self.status_label.setText(f"Exportado: {result.obj}")
+        self.status_label.setText(_("Exportado: {path}").format(path=result.obj))
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Information)
-        box.setWindowTitle("Exportación completada")
-        box.setText("Se escribieron los archivos:")
+        box.setWindowTitle(_("Exportación completada"))
+        box.setText(_("Se escribieron los archivos:"))
         box.setInformativeText(message)
         box.exec()
 
@@ -1101,10 +1166,10 @@ class MainWindow(QMainWindow):
         self._task = None
         self._export_after_render = False
         self._set_busy(False)
-        self._show_error("No se pudo completar la operación.", trace)
+        self._show_error(_("No se pudo completar la operación."), trace)
 
     def _show_error(self, message: str, trace: str) -> None:
-        self.status_label.setText("Error")
+        self.status_label.setText(_("Error"))
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Critical)
         box.setWindowTitle("lite2obj")
@@ -1113,13 +1178,15 @@ class MainWindow(QMainWindow):
         box.exec()
 
     def _on_gl_error(self, message: str) -> None:  # pragma: no cover - depende de la GPU
-        self.status_label.setText("OpenGL no disponible")
+        self.status_label.setText(_("OpenGL no disponible"))
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Critical)
-        box.setWindowTitle("OpenGL no disponible")
+        box.setWindowTitle(_("OpenGL no disponible"))
         box.setText(
-            "No se pudo crear el contexto OpenGL 3.3.\n\n"
-            "En Linux con NVIDIA + Wayland prueba a ejecutar con QT_QPA_PLATFORM=xcb."
+            _(
+                "No se pudo crear el contexto OpenGL 3.3.\n\n"
+                "En Linux con NVIDIA + Wayland prueba a ejecutar con QT_QPA_PLATFORM=xcb."
+            )
         )
         box.setDetailedText(message)
         box.exec()
@@ -1156,46 +1223,50 @@ class MainWindow(QMainWindow):
         if self._busy:
             return
         start = str(self.settings.value("last_dir", str(Path.home())))
-        path, _ = QFileDialog.getOpenFileName(self, "Abrir esquemático", start, _LITEMATIC_FILTER)
+        path, _filter = QFileDialog.getOpenFileName(
+            self, _("Abrir esquemático"), start, _litematic_filter()
+        )
         if path:
             self.open_path(Path(path))
 
     def _pick_out_dir(self) -> None:
         start = self.out_dir.text() or str(Path.home())
-        directory = QFileDialog.getExistingDirectory(self, "Carpeta de exportación", start)
+        directory = QFileDialog.getExistingDirectory(self, _("Carpeta de exportación"), start)
         if directory:
             self.out_dir.setText(directory)
 
     def _screenshot(self) -> None:
         start = Path(str(self.settings.value("last_dir", str(Path.home())))) / "captura.png"
-        path, _ = QFileDialog.getSaveFileName(self, "Guardar captura", str(start), _PNG_FILTER)
+        path, _filter = QFileDialog.getSaveFileName(
+            self, _("Guardar captura"), str(start), _png_filter()
+        )
         if not path:
             return
         if self.viewport.screenshot(path):
-            self.status_label.setText(f"Captura guardada: {path}")
+            self.status_label.setText(_("Captura guardada: {path}").format(path=path))
         else:
-            self._show_error("No se pudo guardar la captura.", path)
+            self._show_error(_("No se pudo guardar la captura."), path)
 
     def _generate_asset_pack(self) -> None:
         if self._busy:
-            self.status_label.setText("Espera a que termine la operación actual")
+            self.status_label.setText(_("Espera a que termine la operación actual"))
             return
         start = str(self.settings.value("last_jar_dir", str(Path.home())))
-        jar_path, _ = QFileDialog.getOpenFileName(
-            self, "Selecciona el client jar de Minecraft", start, _JAR_FILTER
+        jar_path, _filter = QFileDialog.getOpenFileName(
+            self, _("Selecciona el client jar de Minecraft"), start, _jar_filter()
         )
         if not jar_path:
             return
         jar = Path(jar_path)
         if not jar.is_file():
-            self._show_error("No se pudo leer el client jar.", str(jar))
+            self._show_error(_("No se pudo leer el client jar."), str(jar))
             return
         self.settings.setValue("last_jar_dir", str(jar.parent))
 
         default = paths.asset_pack_output()
         default.parent.mkdir(parents=True, exist_ok=True)
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Guardar archivo de assets", str(default), _ASSET_PACK_FILTER
+        path, _filter = QFileDialog.getSaveFileName(
+            self, _("Guardar archivo de assets"), str(default), _asset_pack_filter()
         )
         if not path:
             return
@@ -1203,7 +1274,7 @@ class MainWindow(QMainWindow):
         if output.suffix.lower() != assetpack.ASSET_PACK_SUFFIX:
             output = output.with_suffix(assetpack.ASSET_PACK_SUFFIX)
 
-        self.status_label.setText(f"Generando assets desde {jar.name}…")
+        self.status_label.setText(_("Generando assets desde {name}…").format(name=jar.name))
         task = AssetPackTask(jar, output)
         task.signals.finished.connect(self._on_asset_pack)
         task.signals.failed.connect(self._on_error)
@@ -1226,32 +1297,39 @@ class MainWindow(QMainWindow):
         if self._dirty:
             self.dirty_label.show()
         self.status_label.setText(
-            f"Assets de Minecraft {info.minecraft_version} guardados en {info.path.name}"
+            _("Assets de Minecraft {version} guardados en {name}").format(
+                version=info.minecraft_version, name=info.path.name
+            )
         )
         QMessageBox.information(
             self,
-            "Archivo de assets generado",
-            f"Minecraft: {info.minecraft_version}\n"
-            f"Archivos: {info.files:,}\n"
-            f"Tamaño: {info.compressed_bytes / (1024 * 1024):.1f} MB\n\n"
-            f"{info.path}\n\n"
-            "El programa ya usa este archivo. Vuelve a renderizar si había una malla abierta.",
+            _("Archivo de assets generado"),
+            _(
+                "Minecraft: {version}\nArchivos: {files:,}\nTamaño: {size:.1f} MB\n\n"
+                "{path}\n\nEl programa ya usa este archivo. Vuelve a renderizar si había "
+                "una malla abierta."
+            ).format(
+                version=info.minecraft_version,
+                files=info.files,
+                size=info.compressed_bytes / (1024 * 1024),
+                path=info.path,
+            ),
         )
         if self.path is not None:
             self.render_mesh()
 
     def _render_demo(self) -> None:
         if self._busy:
-            self.status_label.setText("Espera a que termine la operación actual")
+            self.status_label.setText(_("Espera a que termine la operación actual"))
             return
         path = _demo_schematic_path()
         if not path.is_file():
             self._show_error(
-                "No se encontró el esquemático de prueba.",
-                f"Se esperaba en {path}",
+                _("No se encontró el esquemático de prueba."),
+                _("Se esperaba en {path}").format(path=path),
             )
             return
-        self.status_label.setText("Abriendo litemática de prueba…")
+        self.status_label.setText(_("Abriendo litemática de prueba…"))
         self.mobs_check.setChecked(True)
         self.grid_check.setChecked(False)
         self.axes_check.setChecked(False)
@@ -1262,56 +1340,60 @@ class MainWindow(QMainWindow):
         if not associations.supported():
             QMessageBox.information(
                 self,
-                "Asociación de archivos",
-                "La asociación automática sólo está disponible en Linux y Windows.",
+                _("Asociación de archivos"),
+                _("La asociación automática sólo está disponible en Linux y Windows."),
             )
             return
-        state = "activa" if associations.is_associated() else "inactiva"
+        state = _("activa") if associations.is_associated() else _("inactiva")
         answer = QMessageBox.question(
             self,
-            "Asociar archivos .litematic",
-            "Los archivos .litematic se abrirán con lite2obj al hacer doble clic.\n\n"
-            f"Programa: {associations.command_description()}\n"
-            f"Asociación instalada: {state}\n\n"
-            "La asociación se guarda sólo para tu usuario. ¿Continuar?",
+            _("Asociar archivos .litematic"),
+            _(
+                "Los archivos .litematic se abrirán con lite2obj al hacer doble clic.\n\n"
+                "Programa: {command}\nAsociación instalada: {state}\n\n"
+                "La asociación se guarda sólo para tu usuario. ¿Continuar?"
+            ).format(command=associations.command_description(), state=state),
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
         try:
             detail = associations.install(icon=_app_icon_path())
         except associations.AssociationError as exc:
-            self._show_error("No se pudo asociar el archivo .litematic.", str(exc))
+            self._show_error(_("No se pudo asociar el archivo .litematic."), str(exc))
             return
-        QMessageBox.information(self, "Asociación creada", detail)
-        self.status_label.setText("Archivos .litematic asociados a lite2obj")
+        QMessageBox.information(self, _("Asociación creada"), detail)
+        self.status_label.setText(_("Archivos .litematic asociados a lite2obj"))
 
     def _remove_association(self) -> None:
         if not associations.supported():
             return
         answer = QMessageBox.question(
             self,
-            "Quitar asociación de .litematic",
-            "Los archivos .litematic dejarán de abrirse con lite2obj al hacer doble clic.\n\n"
-            "¿Continuar?",
+            _("Quitar asociación de .litematic"),
+            _(
+                "Los archivos .litematic dejarán de abrirse con lite2obj al hacer doble "
+                "clic.\n\n¿Continuar?"
+            ),
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
         try:
             detail = associations.uninstall()
         except associations.AssociationError as exc:
-            self._show_error("No se pudo quitar la asociación.", str(exc))
+            self._show_error(_("No se pudo quitar la asociación."), str(exc))
             return
-        QMessageBox.information(self, "Asociación eliminada", detail)
-        self.status_label.setText("Asociación de .litematic eliminada")
+        QMessageBox.information(self, _("Asociación eliminada"), detail)
+        self.status_label.setText(_("Asociación de .litematic eliminada"))
 
     def _about(self) -> None:
         QMessageBox.about(
             self,
-            "Acerca de lite2obj",
-            "lite2obj\n\n"
-            "Renderiza esquemáticos de Litematica y los exporta a OBJ + MTL + atlas "
-            "para Blender.\n\n"
-            "Python + PySide6 + OpenGL de Qt · texturas del archivo de assets.",
+            _("Acerca de lite2obj"),
+            _(
+                "lite2obj\n\nRenderiza esquemáticos de Litematica y los exporta a OBJ + "
+                "MTL + atlas para Blender.\n\nPython + PySide6 + OpenGL de Qt · texturas "
+                "del archivo de assets."
+            ),
         )
 
     # -- estado ocupado / cierre ------------------------------------------- #
@@ -1336,8 +1418,8 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(busy)
         if busy:
             self.progress.setRange(0, 0)
-            label = {"render": "Renderizando…", "export": "Exportando…"}
-            self.status_label.setText(label.get(kind, "Generando assets…"))
+            label = {"render": _("Renderizando…"), "export": _("Exportando…")}
+            self.status_label.setText(label.get(kind, _("Generando assets…")))
         else:
             self.progress.setRange(0, 1)
             self.progress.setValue(0)
@@ -1412,6 +1494,19 @@ def _configure_opengl() -> None:
     QSurfaceFormat.setDefaultFormat(fmt)
 
 
+def _install_qt_translator(app: QApplication) -> None:
+    """Traduce los textos propios de Qt (botones Sí/No, diálogos no nativos...)."""
+    language = i18n.current_language()
+    if language == "en":
+        return
+    translator = QTranslator(app)
+    directory = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if translator.load(f"qtbase_{language}", directory):
+        app.installTranslator(translator)
+        # La lista mantiene viva la referencia Python mientras exista la aplicación.
+        _QT_TRANSLATORS.append(translator)
+
+
 def run(path: str | Path | None = None) -> None:
     """Arranca la aplicación de escritorio; ``path`` abre un esquemático al inicio."""
     _configure_platform()
@@ -1420,6 +1515,8 @@ def run(path: str | Path | None = None) -> None:
     app = instance if isinstance(instance, QApplication) else QApplication(sys.argv[:1])
     app.setApplicationName("lite2obj")
     app.setOrganizationName("lite2obj")
+    i18n.configure()
+    _install_qt_translator(app)
     app.setStyle("Fusion")
     app.setPalette(_dark_palette())
     app.setStyleSheet(
@@ -1442,10 +1539,18 @@ def run(path: str | Path | None = None) -> None:
 def main() -> int:
     import argparse
 
+    arguments, language = i18n.extract_language_option(sys.argv[1:])
+    i18n.configure(language)
     parser = argparse.ArgumentParser(
-        prog="lite2obj-gui", description="Abre la aplicación de escritorio de lite2obj."
+        prog="lite2obj-gui", description=_("Abre la aplicación de escritorio de lite2obj.")
     )
-    parser.add_argument("path", nargs="?", type=Path, help="archivo .litematic a abrir")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--lang",
+        choices=("en", "es"),
+        default=None,
+        help=_("idioma de la interfaz (en, es)"),
+    )
+    parser.add_argument("path", nargs="?", type=Path, help=_("archivo .litematic a abrir"))
+    args = parser.parse_args(arguments)
     run(args.path)
     return 0

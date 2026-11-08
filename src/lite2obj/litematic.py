@@ -27,6 +27,7 @@ from typing import Any
 import numpy as np
 
 from . import nbt
+from .i18n import _
 
 __all__ = [
     "BlockState",
@@ -95,7 +96,7 @@ def unpack_bits(longs: np.ndarray, bits: int, count: int) -> np.ndarray:
     if bits <= 0:
         return np.zeros(count, dtype=np.int32)
     if bits > 32:
-        raise LitematicError(f"Ancho de bit inválido: {bits}")
+        raise LitematicError(_("Ancho de bit inválido: {bits}").format(bits=bits))
 
     longs = np.asarray(longs)
     if longs.dtype != np.uint64:
@@ -103,8 +104,9 @@ def unpack_bits(longs: np.ndarray, bits: int, count: int) -> np.ndarray:
 
     if longs.size * 64 < count * bits:
         raise LitematicError(
-            f"BlockStates demasiado pequeño: {longs.size} longs para {count} entradas de "
-            f"{bits} bits"
+            _(
+                "BlockStates demasiado pequeño: {longs} longs para {count} entradas de {bits} bits"
+            ).format(longs=longs.size, count=count, bits=bits)
         )
 
     starts = np.arange(count, dtype=np.int64) * bits
@@ -301,11 +303,11 @@ def loads(data: bytes, *, source: Path | None = None) -> Litematic:
     """Parsea los bytes de un ``.litematic`` (comprimido o no)."""
     root = nbt.loads(data)
     if not isinstance(root, dict):
-        raise LitematicError("La raíz NBT no es un compuesto")
+        raise LitematicError(_("La raíz NBT no es un compuesto"))
 
     regions_node = root.get("Regions")
     if not isinstance(regions_node, dict) or not regions_node:
-        raise LitematicError("El archivo no contiene 'Regions'")
+        raise LitematicError(_("El archivo no contiene 'Regions'"))
 
     regions = [_build_region(name, data_) for name, data_ in regions_node.items()]
 

@@ -20,11 +20,11 @@ from typing import Any, Protocol, runtime_checkable
 from PIL import Image
 
 from . import assetpack, paths
+from .i18n import _
 
 __all__ = [
     "DEFAULT_NAMESPACE",
     "DirSource",
-    "MISSING_ASSET_PACK_MESSAGE",
     "InvalidAssetPackError",
     "MemorySource",
     "MissingAssetPackError",
@@ -32,6 +32,7 @@ __all__ = [
     "ResourceSource",
     "ZipSource",
     "blockstate_path",
+    "missing_asset_pack_message",
     "model_path",
     "parse_resource_id",
     "texture_path",
@@ -40,16 +41,18 @@ __all__ = [
 DEFAULT_NAMESPACE = "minecraft"
 _ASSETS = "assets"
 
-#: Texto que se muestra cuando falta el archivo de assets.
-MISSING_ASSET_PACK_MESSAGE = (
-    "No se encontraron las texturas de Minecraft.\n\n"
-    f"Falta el archivo {paths.ASSET_PACK_NAME}. El programa no busca instalaciones de "
-    "Minecraft ni resource packs en el disco.\n\n"
-    "Genera el archivo en un equipo con Minecraft instalado:\n"
-    "  lite2obj assets build --jar <ruta-al-client.jar>\n\n"
-    "Después colócalo junto al programa, en los datos del usuario o define "
-    "LITE2OBJ_ASSET_PACK."
-)
+
+def missing_asset_pack_message() -> str:
+    """Mensaje con instrucciones para generar el archivo de assets."""
+    return _(
+        "No se encontraron las texturas de Minecraft.\n\n"
+        "Falta el archivo {name}. El programa no busca instalaciones de Minecraft "
+        "ni resource packs en el disco.\n\n"
+        "Genera el archivo en un equipo con Minecraft instalado:\n"
+        "  lite2obj assets build --jar <ruta-al-client.jar>\n\n"
+        "Después colócalo junto al programa, en los datos del usuario o define "
+        "LITE2OBJ_ASSET_PACK."
+    ).format(name=paths.ASSET_PACK_NAME)
 
 
 class MissingAssetPackError(FileNotFoundError):
@@ -191,7 +194,7 @@ class ResourceManager:
 
     def __init__(self, sources: list[ResourceSource]) -> None:
         if not sources:
-            raise ValueError("Se necesita al menos una fuente de recursos")
+            raise ValueError(_("Se necesita al menos una fuente de recursos"))
         self.sources = sources
         self._json_cache: dict[str, dict[str, Any] | None] = {}
         self._texture_cache: dict[str, Image.Image | None] = {}
@@ -217,11 +220,13 @@ class ResourceManager:
         """
         pack_path = Path(asset_pack).expanduser() if asset_pack is not None else paths.asset_pack()
         if pack_path is None:
-            raise MissingAssetPackError(MISSING_ASSET_PACK_MESSAGE)
+            raise MissingAssetPackError(missing_asset_pack_message())
         if not assetpack.is_asset_pack(pack_path):
             raise InvalidAssetPackError(
-                f"El archivo de assets no es válido: {pack_path}. "
-                "Genera uno con 'lite2obj assets build'."
+                _(
+                    "El archivo de assets no es válido: {path}. "
+                    "Genera uno con 'lite2obj assets build'."
+                ).format(path=pack_path)
             )
 
         selected: list[ResourceSource] = []
@@ -232,7 +237,7 @@ class ResourceManager:
             elif path.is_dir() and (path / _ASSETS).is_dir():
                 selected.append(DirSource(path))
             else:
-                raise FileNotFoundError(f"Resource pack no válido: {path}")
+                raise FileNotFoundError(_("Resource pack no válido: {path}").format(path=path))
 
         # Prioridad: packs (el último indicado gana) y, por debajo, los assets vanilla.
         sources: list[ResourceSource] = list(reversed(selected))

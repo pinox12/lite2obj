@@ -20,6 +20,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from .i18n import _
+
 __all__ = [
     "AssociationError",
     "command",
@@ -93,7 +95,7 @@ def install(*, icon: Path | None = None) -> str:
         return _install_windows()
     if sys.platform.startswith("linux"):
         return _install_linux(icon)
-    raise AssociationError("La asociación automática sólo está disponible en Linux y Windows.")
+    raise AssociationError(_("La asociación automática sólo está disponible en Linux y Windows."))
 
 
 def uninstall() -> str:
@@ -102,7 +104,7 @@ def uninstall() -> str:
         return _uninstall_windows()
     if sys.platform.startswith("linux"):
         return _uninstall_linux()
-    raise AssociationError("La asociación automática sólo está disponible en Linux y Windows.")
+    raise AssociationError(_("La asociación automática sólo está disponible en Linux y Windows."))
 
 
 def is_associated() -> bool:
@@ -163,8 +165,8 @@ def _desktop_entry(argv: list[str]) -> str:
         "[Desktop Entry]\n"
         "Type=Application\n"
         "Name=lite2obj\n"
-        "GenericName=Renderizador de Litematica\n"
-        "Comment=Renderiza esquemáticos .litematic y los exporta a OBJ para Blender\n"
+        f"GenericName={_('Renderizador de Litematica')}\n"
+        f"Comment={_('Renderiza esquemáticos .litematic y los exporta a OBJ para Blender')}\n"
         f"{_desktop_exec(argv)}\n"
         "Icon=lite2obj\n"
         "Terminal=false\n"
@@ -180,8 +182,8 @@ def _mime_xml() -> str:
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">\n'
         f'  <mime-type type="{MIME_TYPE}">\n'
-        "    <comment>Esquemático de Litematica</comment>\n"
-        '    <comment xml:lang="en">Litematica schematic</comment>\n'
+        "    <comment>Litematica schematic</comment>\n"
+        '    <comment xml:lang="es">Esquemático de Litematica</comment>\n'
         '    <glob pattern="*.litematic"/>\n'
         '    <magic priority="50">\n'
         '      <match value="\\x1f\\x8b" type="string" offset="0"/>\n'
@@ -206,17 +208,16 @@ def _install_linux(icon: Path | None) -> str:
                 shutil.copyfile(icon, destination)
     except OSError as exc:
         raise AssociationError(
-            f"No se pudieron escribir los archivos de asociación: {exc}"
+            _("No se pudieron escribir los archivos de asociación: {error}").format(error=exc)
         ) from exc
 
     _refresh_linux(set_default=True)
-    return (
+    return _(
         "Asociación creada para los archivos .litematic.\n"
-        f"Programa: {command_description()}\n"
-        f"Entrada: {desktop}\n\n"
-        "Si el gestor de archivos no lo detecta al momento, cierra la sesión o vuelve a "
-        "abrir el diálogo «Abrir con»."
-    )
+        "Programa: {command}\nEntrada: {entry}\n\n"
+        "Si el gestor de archivos no lo detecta al momento, cierra la sesión o "
+        "vuelve a abrir el diálogo «Abrir con»."
+    ).format(command=command_description(), entry=desktop)
 
 
 def _uninstall_linux() -> str:
@@ -227,12 +228,16 @@ def _uninstall_linux() -> str:
         try:
             path.unlink()
         except OSError as exc:
-            raise AssociationError(f"No se pudo borrar {path}: {exc}") from exc
+            raise AssociationError(
+                _("No se pudo borrar {path}: {error}").format(path=path, error=exc)
+            ) from exc
         removed = True
     _remove_linux_default()
     _refresh_linux(set_default=False)
     return (
-        "Asociación de .litematic eliminada." if removed else "No había una asociación instalada."
+        _("Asociación de .litematic eliminada.")
+        if removed
+        else _("No había una asociación instalada.")
     )
 
 
@@ -328,7 +333,7 @@ def _install_windows() -> str:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, PROG_ID)
             winreg.SetValueEx(key, "Content Type", 0, winreg.REG_SZ, MIME_TYPE)
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{PROG_ID}") as key:
-            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "Esquemático de Litematica")
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, _("Esquemático de Litematica"))
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER, rf"Software\Classes\{PROG_ID}\DefaultIcon"
         ) as key:
@@ -338,14 +343,16 @@ def _install_windows() -> str:
         ) as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, _windows_open_command(argv))
     except OSError as exc:
-        raise AssociationError(f"No se pudo escribir en el Registro de Windows: {exc}") from exc
+        raise AssociationError(
+            _("No se pudo escribir en el Registro de Windows: {error}").format(error=exc)
+        ) from exc
 
     _notify_windows()
-    return (
+    return _(
         "Asociación creada para los archivos .litematic.\n"
-        f"Programa: {command_description()}\n\n"
+        "Programa: {command}\n\n"
         "Windows puede pedirte que confirmes lite2obj la primera vez que abras un archivo."
-    )
+    ).format(command=command_description())
 
 
 def _uninstall_windows() -> str:
@@ -364,7 +371,9 @@ def _uninstall_windows() -> str:
         removed = True
     _notify_windows()
     return (
-        "Asociación de .litematic eliminada." if removed else "No había una asociación instalada."
+        _("Asociación de .litematic eliminada.")
+        if removed
+        else _("No había una asociación instalada.")
     )
 
 

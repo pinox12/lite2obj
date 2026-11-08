@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .i18n import _
 
 __all__ = [
     "ASSET_PACK_SUFFIX",
@@ -102,11 +103,11 @@ def build_asset_pack(
     jar = Path(jar)
     output = Path(output)
     if not jar.is_file():
-        raise AssetPackError(f"No existe el client jar: {jar}")
+        raise AssetPackError(_("No existe el client jar: {path}").format(path=jar))
     if not zipfile.is_zipfile(jar):
-        raise AssetPackError(f"El client jar no es un zip válido: {jar}")
+        raise AssetPackError(_("El client jar no es un zip válido: {path}").format(path=jar))
     if output.exists() and not force:
-        raise FileExistsError(f"El archivo ya existe: {output}")
+        raise FileExistsError(_("El archivo ya existe: {path}").format(path=output))
     output.parent.mkdir(parents=True, exist_ok=True)
 
     temporary = output.with_name(f"{output.name}.tmp")
@@ -118,8 +119,10 @@ def build_asset_pack(
             ]
             if not entries:
                 raise AssetPackError(
-                    "El jar no contiene assets de Minecraft reconocibles "
-                    f"(se esperaban rutas como {_INCLUDE_PREFIXES[0]})."
+                    _(
+                        "El jar no contiene assets de Minecraft reconocibles "
+                        "(se esperaban rutas como {prefix})."
+                    ).format(prefix=_INCLUDE_PREFIXES[0])
                 )
             version = _minecraft_version(source, jar)
             uncompressed = sum(info.file_size for info in entries)

@@ -32,6 +32,7 @@ from PySide6.QtOpenGL import (
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
+from ..i18n import _
 from ..mesh import Mesh
 from .camera import OrbitCamera
 
@@ -310,12 +311,12 @@ class Viewport(QOpenGLWidget):
             self._main.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Vertex, _VERTEX)
             self._main.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Fragment, _FRAGMENT)
             if not self._main.link():
-                raise RuntimeError(f"shader principal: {self._main.log()}")
+                raise RuntimeError(_("shader principal: {log}").format(log=self._main.log()))
             self._line = QOpenGLShaderProgram(self)
             self._line.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Vertex, _LINE_VERTEX)
             self._line.addShaderFromSourceCode(QOpenGLShader.ShaderTypeBit.Fragment, _LINE_FRAGMENT)
             if not self._line.link():
-                raise RuntimeError(f"shader de líneas: {self._line.log()}")
+                raise RuntimeError(_("shader de líneas: {log}").format(log=self._line.log()))
             self._mu = {
                 name: self._main.uniformLocation(f"u_{name}")
                 for name in ("view_proj", "y_min", "y_max", "depth_bias", "atlas", "mode")

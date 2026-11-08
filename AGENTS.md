@@ -24,6 +24,10 @@ There is no JS/Node step for the app; `docs/` is plain HTML/CSS/JS.
 
 - Docs, docstrings, comments, CLI/UI strings and commit messages are **Spanish**.
   Code identifiers are English. Match this.
+- User-facing strings are written in Spanish and translated through
+  `src/lite2obj/i18n.py` (`from .i18n import _`). English is the default when the system
+  language is not Spanish. `LITE2OBJ_LANG` and `--lang` force a language. Add new strings
+  to the `_EN` catalog; `tests/test_i18n.py` fails if a `_()` literal is missing.
 - Ruff: line length 100, target `py314`, rules `E,F,I,UP,B,SIM`.
 - `src/` layout; package `lite2obj`; CLI entry point `lite2obj.cli:main`; GUI script
   `lite2obj-gui = "lite2obj.gui:main"`.

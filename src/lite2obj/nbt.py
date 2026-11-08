@@ -35,6 +35,8 @@ from typing import Any, BinaryIO
 
 import numpy as np
 
+from .i18n import _
+
 __all__ = [
     "NBTError",
     "TAG_END",
@@ -137,7 +139,7 @@ def decompress(data: bytes, compression: str | None = None) -> bytes:
         return zlib.decompress(data)
     if compression in (None, "none", "raw"):
         return data
-    raise NBTError(f"Compresión desconocida: {compression!r}")
+    raise NBTError(_("Compresión desconocida: {compression!r}").format(compression=compression))
 
 
 class _Reader:
@@ -153,7 +155,11 @@ class _Reader:
     def read(self, n: int) -> bytes:
         end = self.pos + n
         if end > self.size:
-            raise NBTError(f"Fin de buffer inesperado en {self.pos} (pedían {n} bytes)")
+            raise NBTError(
+                _("Fin de buffer inesperado en {position} (pedían {count} bytes)").format(
+                    position=self.pos, count=n
+                )
+            )
         chunk = bytes(self.buf[self.pos : end])
         self.pos = end
         return chunk
@@ -162,7 +168,7 @@ class _Reader:
         st = _SCALARS[tag]
         end = self.pos + st.size
         if end > self.size:
-            raise NBTError(f"Fin de buffer inesperado en {self.pos}")
+            raise NBTError(_("Fin de buffer inesperado en {position}").format(position=self.pos))
         value = st.unpack_from(self.buf, self.pos)[0]
         self.pos = end
         return value
@@ -178,18 +184,18 @@ class _Reader:
         native = _NUMPY_DTYPES[tag]
         be = _NUMPY_BE[tag]
         if length < 0:
-            raise NBTError(f"Longitud de array negativa: {length}")
+            raise NBTError(_("Longitud de array negativa: {length}").format(length=length))
         nbytes = length * be.itemsize
         end = self.pos + nbytes
         if end > self.size:
-            raise NBTError("Fin de buffer inesperado leyendo array")
+            raise NBTError(_("Fin de buffer inesperado leyendo array"))
         view = np.frombuffer(self.buf, dtype=be, count=length, offset=self.pos)
         self.pos = end
         return view.astype(native, copy=False) if be.isnative else view.astype(native)
 
     def read_payload(self, tag: int, depth: int = 0) -> Any:
         if depth > 512:
-            raise NBTError("Anidamiento NBT demasiado profundo (posible archivo corrupto)")
+            raise NBTError(_("Anidamiento NBT demasiado profundo (posible archivo corrupto)"))
         if tag in _SCALARS:
             return self.unpack(tag)
         if tag == TAG_STRING:
@@ -200,14 +206,14 @@ class _Reader:
             return self._read_list(depth)
         if tag == TAG_COMPOUND:
             return self._read_compound(depth)
-        raise NBTError(f"Tag desconocido: {tag}")
+        raise NBTError(_("Tag desconocido: {tag}").format(tag=tag))
 
     def _read_list(self, depth: int) -> list[Any]:
         (item_tag,) = struct.unpack_from(">b", self.buf, self.pos)
         (length,) = struct.unpack_from(">i", self.buf, self.pos + 1)
         self.pos += 5
         if length < 0:
-            raise NBTError(f"Longitud de lista negativa: {length}")
+            raise NBTError(_("Longitud de lista negativa: {length}").format(length=length))
         if item_tag == TAG_END:
             # Una lista vacía puede declarar TAG_End como tipo de elemento.
             return []
@@ -233,7 +239,9 @@ def loads(data: bytes, *, compression: str | None = None) -> Any:
     if tag == TAG_END:
         return None
     if tag != TAG_COMPOUND:
-        raise NBTError(f"La raíz NBT debería ser TAG_Compound, es {TAG_NAMES.get(tag, tag)}")
+        raise NBTError(
+            _("La raíz NBT debería ser TAG_Compound, es {tag}").format(tag=TAG_NAMES.get(tag, tag))
+        )
     reader.read_string()  # nombre del compuesto raíz (normalmente "")
     return reader._read_compound(0)
 

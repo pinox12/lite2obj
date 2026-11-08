@@ -37,6 +37,7 @@ from .assets import (
     model_path,
     parse_resource_id,
 )
+from .i18n import _
 from .litematic import BlockState
 
 __all__ = [
@@ -103,7 +104,7 @@ def rot_axis(axis: str, degrees: float) -> np.ndarray:
         return rot_y(-degrees)
     if axis == "z":
         return rot_z(degrees)
-    raise BlockModelError(f"Eje de rotación inválido: {axis!r}")
+    raise BlockModelError(_("Eje de rotación inválido: {axis!r}").format(axis=axis))
 
 
 def variant_matrix(x: int, y: int) -> np.ndarray:
@@ -232,13 +233,21 @@ class BlockStateDefinition:
                     if score is not None and score > best_score:
                         best, best_score = variants, score
             if best is None:
-                raise BlockModelError(f"{self.block}: ninguna variante coincide con {dict(props)}")
+                raise BlockModelError(
+                    _("{block}: ninguna variante coincide con {props}").format(
+                        block=self.block, props=dict(props)
+                    )
+                )
             return (best,)
 
         parts = self.multipart or ()
         groups = tuple(part.variants for part in parts if part.when.matches(props))
         if not groups:
-            raise BlockModelError(f"{self.block}: ningún multipart coincide con {dict(props)}")
+            raise BlockModelError(
+                _("{block}: ningún multipart coincide con {props}").format(
+                    block=self.block, props=dict(props)
+                )
+            )
         return groups
 
     def used_properties(self) -> set[str]:
@@ -345,7 +354,7 @@ def parse_blockstate(block: str, data: Mapping[str, Any]) -> BlockStateDefinitio
             parts.append(MultipartPart(when=when, variants=tuple(_parse_apply(part.get("apply")))))
         definition.multipart = tuple(parts)
     else:
-        raise BlockModelError(f"{block}: sin 'variants' ni 'multipart'")
+        raise BlockModelError(_("{block}: sin 'variants' ni 'multipart'").format(block=block))
     return definition
 
 
@@ -452,7 +461,9 @@ def default_uv(
         return (z0, 16.0 - y1, z1, 16.0 - y0)
     if direction == "east":
         return (16.0 - z1, 16.0 - y1, 16.0 - z0, 16.0 - y0)
-    raise BlockModelError(f"Dirección de cara inválida: {direction!r}")
+    raise BlockModelError(
+        _("Dirección de cara inválida: {direction!r}").format(direction=direction)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -579,7 +590,7 @@ class ModelResolver:
             return cached
         data = self.resources.read_json(blockstate_path(key))
         if data is None:
-            raise BlockModelError(f"No hay blockstate para {key!r}")
+            raise BlockModelError(_("No hay blockstate para {block!r}").format(block=key))
         definition = parse_blockstate(key, data)
         self._blockstates[key] = definition
         return definition
@@ -626,7 +637,7 @@ class ModelResolver:
     def _load_model(self, model_id: str) -> ResolvedModel:
         data = self.resources.read_json(model_path(model_id))
         if data is None:
-            raise BlockModelError(f"No se encontró el modelo {model_id!r}")
+            raise BlockModelError(_("No se encontró el modelo {model!r}").format(model=model_id))
 
         parent_id = data.get("parent")
         # ``builtin/generated`` y ``builtin/entity`` no son ficheros: son modelos que el

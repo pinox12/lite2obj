@@ -16,13 +16,15 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, assetpack, assets, litematic, paths
+from . import __version__, assetpack, assets, i18n, litematic, paths
+from .i18n import _
 
 __all__ = ["main"]
 
 
 def _human(n: int) -> str:
-    return f"{n:,}".replace(",", ".")
+    text = f"{n:,}"
+    return text.replace(",", ".") if i18n.current_language() == "es" else text
 
 
 def _human_bytes(n: int) -> str:
@@ -39,27 +41,42 @@ def cmd_info(args: argparse.Namespace) -> int:
     size = doc.enclosing_size
 
     print(f"{doc.name or args.path.stem}")
-    print(f"  archivo      {args.path}")
+    print(_("  archivo      {path}").format(path=args.path))
     if doc.author:
-        print(f"  autor        {doc.author}")
+        print(_("  autor        {author}").format(author=doc.author))
     if doc.description:
-        print(f"  descripción  {doc.description}")
-    print(f"  tamaño       {size[0]} x {size[1]} x {size[2]}")
-    print(f"  regiones     {len(doc.regions)}")
-    print(f"  bloques      {_human(doc.block_count)}")
-    print(f"  volumen      {_human(size[0] * size[1] * size[2])}")
-    print(f"  data version {doc.data_version} (formato v{doc.version}.{doc.sub_version})")
+        print(_("  descripción  {description}").format(description=doc.description))
+    print(
+        _("  tamaño       {width} x {height} x {depth}").format(
+            width=size[0], height=size[1], depth=size[2]
+        )
+    )
+    print(_("  regiones     {count}").format(count=len(doc.regions)))
+    print(_("  bloques      {count}").format(count=_human(doc.block_count)))
+    print(_("  volumen      {volume}").format(volume=_human(size[0] * size[1] * size[2])))
+    print(
+        _("  data version {version} (formato v{major}.{minor})").format(
+            version=doc.data_version, major=doc.version, minor=doc.sub_version
+        )
+    )
 
     for region in doc.regions:
-        print(f"\n  región '{region.name}'")
-        print(f"    origen    {region.origin}")
-        print(f"    tamaño    {region.size[0]} x {region.size[1]} x {region.size[2]}")
-        print(f"    paleta    {len(region.palette)} estados")
-        print(f"    entidades {len(region.tile_entities)} tile entities")
+        print("\n" + _("  región '{name}'").format(name=region.name))
+        print(_("    origen    {origin}").format(origin=region.origin))
+        print(
+            _("    tamaño    {width} x {height} x {depth}").format(
+                width=region.size[0], height=region.size[1], depth=region.size[2]
+            )
+        )
+        print(_("    paleta    {count} estados").format(count=len(region.palette)))
+        print(_("    entidades {count} tile entities").format(count=len(region.tile_entities)))
 
     counts = doc.block_counts()
     top = list(counts.items())[: args.blocks]
-    print(f"\n  {len(counts)} tipos de bloque distintos; los más frecuentes:")
+    print(
+        "\n"
+        + _("  {count} tipos de bloque distintos; los más frecuentes:").format(count=len(counts))
+    )
     width = max((len(name) for name, _ in top), default=0)
     total = doc.block_count or 1
     for name, count in top:
@@ -71,14 +88,17 @@ def cmd_info(args: argparse.Namespace) -> int:
 def cmd_list(args: argparse.Namespace) -> int:
     pack = paths.asset_pack()
     if pack is None:
-        print(assets.MISSING_ASSET_PACK_MESSAGE, file=sys.stderr)
+        print(assets.missing_asset_pack_message(), file=sys.stderr)
         return 1
     manifest = assetpack.read_manifest(pack)
     if manifest is None:
-        print(f"El archivo de assets no es válido: {pack}", file=sys.stderr)
+        print(
+            _("El archivo de assets no es válido: {path}").format(path=pack),
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"Archivo de assets: {pack}")
+    print(_("Archivo de assets: {path}").format(path=pack))
     for key in (
         "minecraft_version",
         "generator",
@@ -89,7 +109,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     ):
         if key in manifest:
             print(f"  {key:<18} {manifest[key]}")
-    print("\nNo se buscan esquemáticos ni resource packs automáticamente.")
+    print("\n" + _("No se buscan esquemáticos ni resource packs automáticamente."))
     return 0
 
 
@@ -97,7 +117,7 @@ def cmd_assets_build(args: argparse.Namespace) -> int:
     jar = Path(args.jar).expanduser() if args.jar is not None else paths.explicit_client_jar()
     if jar is None:
         print(
-            "No se indicó ningún client jar. Usa --jar <ruta> o define LITE2OBJ_CLIENT_JAR.",
+            _("No se indicó ningún client jar. Usa --jar <ruta> o define LITE2OBJ_CLIENT_JAR."),
             file=sys.stderr,
         )
         return 1
@@ -105,14 +125,18 @@ def cmd_assets_build(args: argparse.Namespace) -> int:
     try:
         info = assetpack.build_asset_pack(jar, output, force=args.force)
     except (assetpack.AssetPackError, FileExistsError, OSError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        print(_("Error: {error}").format(error=exc), file=sys.stderr)
         return 1
 
-    print(f"Minecraft  {info.minecraft_version}")
-    print(f"Archivo    {info.path}")
-    print(f"Contenido  {info.files} archivos, {_human_bytes(info.uncompressed_bytes)}")
-    print(f"Tamaño     {_human_bytes(info.compressed_bytes)}")
-    print("\nEl programa usará este archivo si está en los datos del usuario.")
+    print(_("Minecraft  {version}").format(version=info.minecraft_version))
+    print(_("Archivo    {path}").format(path=info.path))
+    print(
+        _("Contenido  {files} archivos, {size}").format(
+            files=info.files, size=_human_bytes(info.uncompressed_bytes)
+        )
+    )
+    print(_("Tamaño     {size}").format(size=_human_bytes(info.compressed_bytes)))
+    print("\n" + _("El programa usará este archivo si está en los datos del usuario."))
     return 0
 
 
@@ -120,16 +144,19 @@ def cmd_assets_info(args: argparse.Namespace) -> int:
     pack = Path(args.pack) if args.pack is not None else paths.asset_pack()
     if pack is None:
         print(
-            "No se encontró ningún archivo de assets. Genera uno con 'lite2obj assets build'.",
+            _("No se encontró ningún archivo de assets. Genera uno con 'lite2obj assets build'."),
             file=sys.stderr,
         )
         return 1
     manifest = assetpack.read_manifest(pack)
     if manifest is None:
-        print(f"El archivo no es válido: {pack}", file=sys.stderr)
+        print(
+            _("El archivo no es válido: {path}").format(path=pack),
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"Archivo    {pack}")
+    print(_("Archivo    {path}").format(path=pack))
     for key in (
         "minecraft_version",
         "generator",
@@ -167,16 +194,28 @@ def cmd_export(args: argparse.Namespace) -> int:
             scale=args.scale,
         )
     except (FileNotFoundError, assets.InvalidAssetPackError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        print(_("Error: {error}").format(error=exc), file=sys.stderr)
         return 1
-    print(f"OBJ    {result.obj}  ({_human_bytes(result.bytes_written)})")
-    if result.mtl:
-        print(f"MTL    {result.mtl}")
-    if result.atlas:
-        print(f"atlas  {result.atlas}  ({result.atlas.stat().st_size} B)")
     print(
-        f"\n{_human(result.faces)} caras, {_human(result.vertices)} vértices, "
-        f"{_human(result.uvs)} UVs"
+        _("OBJ    {path}  ({size})").format(
+            path=result.obj, size=_human_bytes(result.bytes_written)
+        )
+    )
+    if result.mtl:
+        print(_("MTL    {path}").format(path=result.mtl))
+    if result.atlas:
+        print(
+            _("atlas  {path}  ({size} B)").format(
+                path=result.atlas, size=result.atlas.stat().st_size
+            )
+        )
+    print(
+        "\n"
+        + _("{faces} caras, {vertices} vértices, {uvs} UVs").format(
+            faces=_human(result.faces),
+            vertices=_human(result.vertices),
+            uvs=_human(result.uvs),
+        )
     )
     return 0
 
@@ -189,108 +228,129 @@ def cmd_gui(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="lite2obj", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        prog="lite2obj", description=_("Interfaz de línea de comandos de lite2obj.")
+    )
     parser.add_argument("--version", action="version", version=f"lite2obj {__version__}")
+    parser.add_argument(
+        "--lang",
+        choices=("en", "es"),
+        default=None,
+        help=_("idioma de la interfaz (en, es)"),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    info = sub.add_parser("info", help="muestra metadatos y recuento de bloques")
-    info.add_argument("path", type=Path, help="archivo .litematic")
+    info = sub.add_parser("info", help=_("muestra metadatos y recuento de bloques"))
+    info.add_argument("path", type=Path, help=_("archivo .litematic"))
     info.add_argument(
-        "--blocks", type=int, default=15, help="cuántos tipos de bloque listar (0 = todos)"
+        "--blocks",
+        type=int,
+        default=15,
+        help=_("cuántos tipos de bloque listar (0 = todos)"),
     )
     info.set_defaults(func=cmd_info)
 
-    listing = sub.add_parser("list", help="muestra el archivo de assets activo")
+    listing = sub.add_parser("list", help=_("muestra el archivo de assets activo"))
     listing.set_defaults(func=cmd_list)
 
-    asset_parser = sub.add_parser("assets", help="gestiona el archivo de assets de Minecraft")
+    asset_parser = sub.add_parser("assets", help=_("gestiona el archivo de assets de Minecraft"))
     asset_sub = asset_parser.add_subparsers(dest="assets_command", required=True)
 
     asset_build = asset_sub.add_parser(
-        "build", help="extrae blockstates, modelos y texturas de un client jar"
+        "build", help=_("extrae blockstates, modelos y texturas de un client jar")
     )
     asset_build.add_argument(
         "--jar",
         type=Path,
         default=None,
-        help="client jar de Minecraft (obligatorio si no defines LITE2OBJ_CLIENT_JAR)",
+        help=_("client jar de Minecraft (obligatorio si no defines LITE2OBJ_CLIENT_JAR)"),
     )
     asset_build.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="archivo .l2oassets de salida (por defecto, en los datos del usuario)",
+        help=_("archivo .l2oassets de salida (por defecto, en los datos del usuario)"),
     )
     asset_build.add_argument(
-        "--force", action="store_true", help="sobrescribe el archivo si ya existe"
+        "--force", action="store_true", help=_("sobrescribe el archivo si ya existe")
     )
     asset_build.set_defaults(func=cmd_assets_build)
 
-    asset_info = asset_sub.add_parser("info", help="muestra el manifiesto de un archivo de assets")
+    asset_info = asset_sub.add_parser(
+        "info", help=_("muestra el manifiesto de un archivo de assets")
+    )
     asset_info.add_argument(
         "pack",
         type=Path,
         nargs="?",
         default=None,
-        help="archivo .l2oassets (por defecto, el que usa el programa)",
+        help=_("archivo .l2oassets (por defecto, el que usa el programa)"),
     )
     asset_info.set_defaults(func=cmd_assets_info)
 
-    export = sub.add_parser("export", help="exporta a OBJ + MTL + atlas")
-    export.add_argument("path", type=Path, help="archivo .litematic")
-    export.add_argument("destination", type=Path, nargs="?", default=None, help="carpeta de salida")
-    export.add_argument("--name", default=None, help="nombre base de los archivos")
+    export = sub.add_parser("export", help=_("exporta a OBJ + MTL + atlas"))
+    export.add_argument("path", type=Path, help=_("archivo .litematic"))
+    export.add_argument(
+        "destination", type=Path, nargs="?", default=None, help=_("carpeta de salida")
+    )
+    export.add_argument("--name", default=None, help=_("nombre base de los archivos"))
     export.add_argument(
         "--packs",
         action="append",
         default=[],
         metavar="PACK",
-        help="ruta a un resource pack (.zip o carpeta); repetible, el último tiene prioridad",
+        help=_("ruta a un resource pack (.zip o carpeta); repetible, el último tiene prioridad"),
     )
-    export.add_argument("--z-up", action="store_true", help="exporta con el eje Z arriba (Blender)")
+    export.add_argument(
+        "--z-up", action="store_true", help=_("exporta con el eje Z arriba (Blender)")
+    )
     export.add_argument(
         "--group-by",
         choices=["none", "block", "alpha"],
         default="none",
-        help="agrupa las caras del OBJ por bloque o por modo de transparencia",
+        help=_("agrupa las caras del OBJ por bloque o por modo de transparencia"),
     )
-    export.add_argument("--no-cull", action="store_true", help="no descarta caras ocultas")
-    export.add_argument("--no-tint", action="store_true", help="desactiva los tintes de bioma")
+    export.add_argument("--no-cull", action="store_true", help=_("no descarta caras ocultas"))
+    export.add_argument("--no-tint", action="store_true", help=_("desactiva los tintes de bioma"))
     export.add_argument(
         "--no-entities",
         action="store_true",
-        help="no dibuja entidades ni *block entities* (cofres, marcos, cuadros...)",
+        help=_("no dibuja entidades ni *block entities* (cofres, marcos, cuadros...)"),
     )
     export.add_argument(
         "--mobs",
         action="store_true",
-        help="dibuja criaturas (desactivado por defecto; requiere entidades)",
+        help=_("dibuja criaturas (desactivado por defecto; requiere entidades)"),
     )
     export.add_argument(
         "--droped-items",
         action="store_true",
-        help="dibuja items caídos (desactivado por defecto; requiere entidades)",
+        help=_("dibuja items caídos (desactivado por defecto; requiere entidades)"),
     )
     export.add_argument(
         "--atlas-scale",
         type=int,
         choices=[1, 2, 4],
         default=1,
-        help="multiplica la resolución de las texturas del atlas",
+        help=_("multiplica la resolución de las texturas del atlas"),
     )
-    export.add_argument("--scale", type=float, default=1.0, help="escala de la geometría exportada")
+    export.add_argument(
+        "--scale", type=float, default=1.0, help=_("escala de la geometría exportada")
+    )
     export.set_defaults(func=cmd_export)
 
-    gui = sub.add_parser("gui", help="abre la aplicación de escritorio")
-    gui.add_argument("path", type=Path, nargs="?", default=None, help="archivo .litematic")
+    gui = sub.add_parser("gui", help=_("abre la aplicación de escritorio"))
+    gui.add_argument("path", type=Path, nargs="?", default=None, help=_("archivo .litematic"))
     gui.set_defaults(func=cmd_gui)
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments, language = i18n.extract_language_option(sys.argv[1:] if argv is None else list(argv))
+    i18n.configure(language)
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
     blocks = getattr(args, "blocks", 15)
     if blocks <= 0:
         args.blocks = 10**9

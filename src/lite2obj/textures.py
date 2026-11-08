@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from PIL import Image
 
 from .assets import texture_path
+from .i18n import _
 
 if TYPE_CHECKING:  # pragma: no cover
     from .assets import ResourceManager
@@ -454,4 +455,4 @@ def _shelf_pack(
             total_height = y + row_height
             return width, next_power_of_two(total_height), positions
         width *= 2
-    raise ValueError("Las texturas no caben en un atlas de 8192x8192")
+    raise ValueError(_("Las texturas no caben en un atlas de 8192x8192"))
